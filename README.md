@@ -1,4 +1,4 @@
-# Frame Window Analyzer — Geode mod prototype v0.1
+# Frame Window Analyzer — Geode mod prototype v0.1.1
 
 Frame Window Analyzer records a deterministic Geometry Dash input macro and automatically measures the passing frame window around every recorded **HOLD** and **RELEASE**.
 
@@ -30,6 +30,10 @@ For each input the report stores:
 Example: `-2 PASS, -1 PASS, 0 PASS, +1 PASS, +2 FAIL` gives `Early=2`, `Late=1`, `N_i=4`.
 
 If a passing segment reaches the configured scan boundary, the report prints a warning so you know to increase **Frame Scan Radius**.
+
+### Four-frame window example
+
+If a wave timing has four valid ticks and the recorded click lands on the second valid tick, the analyzer still reports the full window. For example, `-1 PASS, 0 PASS, +1 PASS, +2 PASS` with failures outside that range gives `Early=1`, `Late=2`, `N_i=4`. The recorded frame is only the anchor used to search both directions; it is not treated as the whole window.
 
 ## NaNDL export
 

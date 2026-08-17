@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.21)
-project(FrameWindowAnalyzer VERSION 0.1.0 LANGUAGES CXX)
+project(FrameWindowAnalyzer VERSION 0.1.1 LANGUAGES CXX)
 
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
@@ -14,7 +14,7 @@ add_library(fwa_core STATIC
     src/runtime/AnalysisSession.cpp
 )
 target_include_directories(fwa_core PUBLIC src)
-target_compile_features(fwa_core PUBLIC cxx_std_20)
+target_compile_features(fwa_core PUBLIC cxx_std_23)
 
 if(FWA_BUILD_TESTS)
     enable_testing()
@@ -37,7 +37,7 @@ if(NOT FWA_CORE_ONLY)
         src/hooks/GameHooks.cpp
     )
     target_include_directories(${PROJECT_NAME} PRIVATE src)
-    target_link_libraries(${PROJECT_NAME} PRIVATE fwa_core)
+    target_link_libraries(${PROJECT_NAME} fwa_core)
 
     add_subdirectory($ENV{GEODE_SDK} ${CMAKE_CURRENT_BINARY_DIR}/geode)
     setup_geode_mod(${PROJECT_NAME})

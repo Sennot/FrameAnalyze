@@ -30,6 +30,19 @@ int main() {
     }
 
     {
+        // Recorded on the second valid frame of a four-frame wave gap:
+        // valid frames are offsets -1, 0, +1, +2. The analyzer must return N_i=4.
+        std::map<int, bool> verdicts;
+        for (int i = -4; i <= 4; ++i) verdicts[i] = (i >= -1 && i <= 2);
+        auto result = FrameWindow::summarize(0, inputAt(150), 4, verdicts);
+        assert(result.baselinePassed);
+        assert(result.early == 1);
+        assert(result.late == 2);
+        assert(result.frameWindow == 4);
+        assert(!result.clippedByScanRadius);
+    }
+
+    {
         std::map<int, bool> verdicts;
         for (int i = -3; i <= 3; ++i) verdicts[i] = (i == 0);
         auto result = FrameWindow::summarize(1, inputAt(200, InputAction::Release), 3, verdicts);

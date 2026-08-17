@@ -5,7 +5,7 @@
   },
   "id": "framewindow.analyzer",
   "name": "Frame Window Analyzer",
-  "version": "v0.1.0",
+  "version": "v0.1.1",
   "developer": "Frame Window Analyzer Contributors",
   "description": "Records Geometry Dash inputs and analyzes HOLD/RELEASE frame windows for NaNDL-style frame-window calculations.",
   "settings": {

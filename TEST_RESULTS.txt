@@ -1,12 +1,13 @@
-Frame Window Analyzer v0.1 portable validation
+Frame Window Analyzer v0.1.1 portable validation
 
 Compiler: GNU C++ 14.2.0
-Language: C++20
+Language: C++23
 Configuration: FWA_CORE_ONLY=ON, FWA_BUILD_TESTS=ON
 Extra warning pass: -Wall -Wextra -Wpedantic -Werror
 
 Tests covered:
 - contiguous HOLD window: early=2, late=1, N_i=4
+- four-frame wave-gap regression: recorded on second valid frame -> early=1, late=2, N_i=4
 - RELEASE frame-perfect window: N_i=1
 - disjoint passing islands: only island containing offset 0 becomes N_i
 - failed baseline: N_i=0
