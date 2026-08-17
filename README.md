@@ -1,4 +1,4 @@
-# Frame Window Analyzer — Geode mod prototype v0.1.1
+# Frame Window Analyzer — Geode mod prototype v0.1.2
 
 Frame Window Analyzer records a deterministic Geometry Dash input macro and automatically measures the passing frame window around every recorded **HOLD** and **RELEASE**.
 

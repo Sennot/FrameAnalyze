@@ -6,6 +6,13 @@ on:
     branches: ["**"]
   pull_request:
 
+permissions:
+  contents: read
+
+env:
+  GEODE_VERSION: v5.8.2
+  GEODE_CLI_VERSION: v3.8.0
+
 jobs:
   core-tests:
     name: Portable core tests
@@ -20,20 +27,144 @@ jobs:
         run: ctest --test-dir build-core --output-on-failure -C Release
 
   build-win64:
-    name: Geode Win64 build
+    name: Geode Win64 build (self-contained)
     needs: core-tests
     runs-on: windows-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
-      - name: Build Geode mod
-        id: build
-        uses: geode-sdk/build-geode-mod@main
-        with:
-          sdk: v5.8.2
-          build-config: RelWithDebInfo
-          export-pdb: true
+
+      - name: Verify build tools
+        shell: pwsh
+        run: |
+          clang++ --version
+          cmake --version
+          if (-not (Get-Command ninja -ErrorAction SilentlyContinue)) {
+            choco install ninja -y --no-progress
+          }
+          ninja --version
+          gh --version
+
+      - name: Install Geode CLI without composite action
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$GITHUB_WORKSPACE/geode-cli-download" "$GITHUB_WORKSPACE/geode-cli-bin"
+
+          ASSET="$(gh release view "$GEODE_CLI_VERSION" \
+            --repo geode-sdk/cli \
+            --json assets \
+            --jq '.assets[].name' | grep -Ei '(windows|win64|win|\.exe$)' | head -n 1 || true)"
+
+          if [ -z "$ASSET" ]; then
+            echo "Unable to locate a Windows asset for Geode CLI $GEODE_CLI_VERSION" >&2
+            echo "Release assets were:" >&2
+            gh release view "$GEODE_CLI_VERSION" --repo geode-sdk/cli --json assets --jq '.assets[].name' >&2
+            exit 1
+          fi
+
+          echo "Downloading Geode CLI asset: $ASSET"
+          gh release download "$GEODE_CLI_VERSION" \
+            --repo geode-sdk/cli \
+            --pattern "$ASSET" \
+            --dir "$GITHUB_WORKSPACE/geode-cli-download" \
+            --clobber
+
+          DOWNLOADED="$GITHUB_WORKSPACE/geode-cli-download/$ASSET"
+          case "${ASSET,,}" in
+            *.zip)
+              7z x "$DOWNLOADED" -o"$GITHUB_WORKSPACE/geode-cli-bin" -y
+              ;;
+            *.7z)
+              7z x "$DOWNLOADED" -o"$GITHUB_WORKSPACE/geode-cli-bin" -y
+              ;;
+            *.exe)
+              cp "$DOWNLOADED" "$GITHUB_WORKSPACE/geode-cli-bin/geode.exe"
+              ;;
+            *)
+              # Some releases use an archive without a conventional extension.
+              7z x "$DOWNLOADED" -o"$GITHUB_WORKSPACE/geode-cli-bin" -y || cp "$DOWNLOADED" "$GITHUB_WORKSPACE/geode-cli-bin/geode.exe"
+              ;;
+          esac
+
+          GEODE_EXE="$(find "$GITHUB_WORKSPACE/geode-cli-bin" -type f -iname 'geode.exe' | head -n 1 || true)"
+          if [ -z "$GEODE_EXE" ]; then
+            # Last-resort: if the Windows release contains a single .exe with another name.
+            GEODE_EXE="$(find "$GITHUB_WORKSPACE/geode-cli-bin" -type f -iname '*.exe' | head -n 1 || true)"
+          fi
+          if [ -z "$GEODE_EXE" ]; then
+            echo "geode.exe was not found after extracting $ASSET" >&2
+            find "$GITHUB_WORKSPACE/geode-cli-bin" -maxdepth 3 -type f -print >&2
+            exit 1
+          fi
+
+          if [ "$(basename "$GEODE_EXE")" != "geode.exe" ]; then
+            cp "$GEODE_EXE" "$GITHUB_WORKSPACE/geode-cli-bin/geode.exe"
+            GEODE_EXE="$GITHUB_WORKSPACE/geode-cli-bin/geode.exe"
+          fi
+
+          CLI_DIR="$(dirname "$GEODE_EXE")"
+          echo "$CLI_DIR" >> "$GITHUB_PATH"
+          "$GEODE_EXE" --version
+
+      - name: Install and prepare Geode SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          export GEODE_SDK="$GITHUB_WORKSPACE/geode-sdk-clone"
+          echo "GEODE_SDK=$GEODE_SDK" >> "$GITHUB_ENV"
+          echo "CPM_SOURCE_CACHE=$GITHUB_WORKSPACE/cpm-cache" >> "$GITHUB_ENV"
+
+          # Mirror the environment expected by Geode's normal build action.
+          CLI_PROFILE="$GITHUB_WORKSPACE/cli-profile"
+          mkdir -p "$CLI_PROFILE/geode/mods" "$CLI_PROFILE/Contents/geode/mods"
+          geode profile add --name GithubActions "$CLI_PROFILE/GeometryDash.exe" win || true
+
+          geode sdk install "$GEODE_SDK"
+          geode sdk update "$GEODE_VERSION"
+          geode sdk install-binaries --platform win --version "$GEODE_VERSION"
+
+      - name: Configure Geode Win64
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.cache"
+          cmake -S . -B build \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_CXX_COMPILER=clang++ \
+            '-DGEODE_CODEGEN_CMAKE_ARGS=-DCMAKE_C_COMPILER=clang;-DCMAKE_CXX_COMPILER=clang++;-G Ninja' \
+            -DGEODE_DONT_INSTALL_MODS=ON \
+            -DGEODE_TARGET_PLATFORM=Win64
+
+      - name: Build Geode Win64
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake --build build --config RelWithDebInfo --parallel
+
+      - name: Collect build output
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p output
+          while IFS= read -r -d '' file; do
+            cp "$file" output/
+          done < <(find build -type f \( -iname '*.geode' -o -iname '*.pdb' \) -print0)
+
+          echo "Collected files:"
+          find output -maxdepth 1 -type f -print
+
+          if ! find output -maxdepth 1 -type f -iname '*.geode' | grep -q .; then
+            echo "Build completed but no .geode package was produced." >&2
+            exit 1
+          fi
+
       - name: Upload build
         uses: actions/upload-artifact@v4
         with:
           name: FrameWindowAnalyzer-Win64
-          path: ${{ steps.build.outputs.build-output }}
+          path: output/
+          if-no-files-found: error

@@ -1,11 +1,13 @@
 # Changelog
 
+## v0.1.2
+- Replaced `geode-sdk/build-geode-mod@main` with a self-contained Win64 workflow.
+- Geode CLI v3.8.0 is downloaded through authenticated `gh release` requests using `GITHUB_TOKEN`.
+- Geode SDK is installed and pinned to v5.8.2 through the Geode CLI, then Win64 binaries are installed explicitly.
+- CMake/Ninja configuration and `.geode`/PDB collection are now explicit workflow steps.
+- This avoids the specific GitHub `codeload` 429 failure that prevented the previous workflow from starting.
+
 ## v0.1.1
-
-- Fixed Geode CMake configure failure caused by mixing keyword and plain `target_link_libraries` signatures on `FrameWindowAnalyzer`.
-- Raised the project language level to C++23, as required by Geode v5.
-- Added a regression test for a four-frame timing when the recorded click is on the second valid frame.
-
-## v0.1.0
-
-- Initial analyzer prototype.
+- Fixed mixed keyword/plain `target_link_libraries` usage with `setup_geode_mod()`.
+- Updated the project to C++23 for Geode v5.
+- Added regression coverage for a 4-frame window where the recorded click is the second passing frame.
