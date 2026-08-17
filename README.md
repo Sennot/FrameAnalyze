@@ -1,4 +1,4 @@
-# FWBot v0.2.0
+# FWBot v0.2.1
 
 FWBot is a Windows Geode bot for Geometry Dash 2.2081 / Geode 5.8.2 focused on deterministic practice recording and automatic HOLD/RELEASE frame-window analysis.
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.2.1 — Geode 5.8.2 binding fixes
+- Fix PracticeAnchor restore on GD 2.2081: `GJEffectManager::loadFromState` takes a non-const `EffectManagerState&`, so FWBot now restores from a working copy while preserving the captured anchor for repeated playback/analyze branches.
+- Include the required generated `<Geode/modify/CCEGLView.hpp>` header before applying the ImGui `CCEGLView::swapBuffers()` hook.
+- Add `tests/source_contract_tests.py` and run it in GitHub Actions to catch missing class-specific Geode modify headers and the EffectManagerState constness contract before the Win64 build.
+
 ## v0.2.0 — FWBot architecture rebuild
 - Rename the user-facing bot to **FWBot** while keeping the existing mod ID so the update replaces v0.1 instead of installing beside it.
 - Replace the old CocosUI menu with a black Dear ImGui Win32/OpenGL3 overlay, grouped into Macro, Frame tools, Speedhack, Analysis, Visuals and Debug sections.

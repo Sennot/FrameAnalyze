@@ -19,6 +19,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Audit Geode source contracts
+        run: python3 tests/source_contract_tests.py
       - name: Configure portable core
         run: cmake -S . -B build-core -DFWBOT_CORE_ONLY=ON -DFWBOT_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Release
       - name: Build portable core

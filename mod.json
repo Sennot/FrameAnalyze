@@ -3,7 +3,7 @@
   "gd": { "win": "2.2081" },
   "id": "framewindow.analyzer",
   "name": "FWBot",
-  "version": "v0.2.0",
+  "version": "v0.2.1",
   "developer": "FWBot Contributors",
   "description": "Practice-based macro bot and automatic HOLD/RELEASE frame-window analyzer for NaNDL calculations.",
   "settings": {

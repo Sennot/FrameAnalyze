@@ -5,6 +5,7 @@
 
 #include <Geode/Geode.hpp>
 #include <Geode/loader/Mod.hpp>
+#include <Geode/modify/CCEGLView.hpp>
 
 #include <imgui.h>
 #include <imgui_impl_opengl3.h>

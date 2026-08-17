@@ -38,3 +38,11 @@ These are audited against the same Geode/Silicate API surface, but the included 
 
 ## UI/link audit
 Dear ImGui uses its standard Win32 and OpenGL3 backends. CMake explicitly links `opengl32`, `user32`, `gdi32`, and `imm32` on the Win64 mod target.
+
+## v0.2.1 findings from real Win64 build
+The user's v0.2.0 GitHub Actions reached step 41/47. The build proved that Dear ImGui itself linked (`fwbot_imgui.lib`) and that `main.cpp`, `BotController.cpp`, `FileLogger.cpp`, `Speedhack.cpp`, and `TrajectoryOverlay.cpp` compiled. Two remaining compile contracts were exposed:
+
+1. `GJEffectManager::loadFromState(EffectManagerState&)` is non-const in the generated GD 2.2081 binding. `PracticeAnchor::applySupplemental` now copies `m_effectState` into a working state before calling the binding, preserving deterministic repeated restores.
+2. `Modify<..., cocos2d::CCEGLView>` requires the generated class-specific modifier header. `ImGuiOverlay.cpp` now includes `<Geode/modify/CCEGLView.hpp>`.
+
+`tests/source_contract_tests.py` enforces both contracts in the portable CI job.

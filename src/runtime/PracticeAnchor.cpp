@@ -74,7 +74,12 @@ void PracticeAnchor::applySupplemental(PlayLayer* layer) const {
     if (!validFor(layer)) return;
     layer->m_gameState = m_gameState;
     if (m_hasSupplemental && layer->m_effectManager) {
-        layer->m_effectManager->loadFromState(m_effectState);
+        // Geode/GD 2.2081 binds loadFromState as taking EffectManagerState&,
+        // even though restoring should not mutate FWBot's saved anchor. Pass a
+        // working copy so this method can remain const and repeated restores
+        // always start from the exact same captured effect state.
+        auto effectState = m_effectState;
+        layer->m_effectManager->loadFromState(effectState);
     }
 }
 

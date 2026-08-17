@@ -1,4 +1,4 @@
-FWBot v0.2.0 test results
+FWBot v0.2.1 test results
 =========================
 
 Portable analyzer core
@@ -17,13 +17,17 @@ Regression coverage includes:
 - fast-scan stop-after-FAIL behavior
 - rejection of shifted HOLD/RELEASE candidates that create invalid input ordering
 
-Static/config checks
-- `mod.json` parses as JSON.
-- `.github/workflows/build.yml` parses as YAML.
+Source/API contract checks
+- Required Geode modify headers are asserted for GJBaseGameLayer, PlayLayer, and CCEGLView.
+- PracticeAnchor never passes its const saved EffectManagerState directly to loadFromState(EffectManagerState&); a working copy is used.
+- Keybind listener remains const-invocable and bool-returning.
+- mod.json targets Geode 5.8.2 / GD 2.2081 and version v0.2.1.
+
+Config checks
+- mod.json parses as JSON.
+- .github/workflows/build.yml parses as YAML.
 - CMake portable-core configure/build/test succeeds.
-- Old CocosUI/BotMenu sources are not present in the v0.2 source list.
-- Keybind listener still has the v0.1.4 const-invocable bool contract guarded by `static_assert`.
 
 Runtime/Win64 note
-- v0.1.4 was confirmed by the user's GitHub Actions to build successfully.
-- v0.2 changes the UI and several runtime APIs, so its included Windows GitHub Actions job is still required as the authoritative Geode compile/link/package test.
+- The user's v0.2.0 Actions build reached 41/47 before exposing only the PracticeAnchor const-reference and CCEGLView modifier-header compile errors fixed in v0.2.1.
+- The next GitHub Actions run remains the authoritative Win64 Geode compile/link/package check.
