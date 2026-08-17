@@ -1,0 +1,18 @@
+Frame Window Analyzer v0.1 portable validation
+
+Compiler: GNU C++ 14.2.0
+Language: C++20
+Configuration: FWA_CORE_ONLY=ON, FWA_BUILD_TESTS=ON
+Extra warning pass: -Wall -Wextra -Wpedantic -Werror
+
+Tests covered:
+- contiguous HOLD window: early=2, late=1, N_i=4
+- RELEASE frame-perfect window: N_i=1
+- disjoint passing islands: only island containing offset 0 becomes N_i
+- failed baseline: N_i=0
+- scan-radius clipping flag
+- NaNDL JSON/CSV calculator fields
+- adaptive fast scan: stops one direction after first FAIL, continues the other side
+
+Result:
+100% tests passed, 0 tests failed.

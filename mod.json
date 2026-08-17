@@ -1,0 +1,98 @@
+{
+  "geode": "5.8.2",
+  "gd": {
+    "win": "2.2081"
+  },
+  "id": "framewindow.analyzer",
+  "name": "Frame Window Analyzer",
+  "version": "v0.1.0",
+  "developer": "Frame Window Analyzer Contributors",
+  "description": "Records Geometry Dash inputs and analyzes HOLD/RELEASE frame windows for NaNDL-style frame-window calculations.",
+  "settings": {
+    "analysis-tps": {
+      "type": "int",
+      "name": "Analysis TPS",
+      "description": "Fixed physics tick rate used while recording, playback and analysis.",
+      "default": 240,
+      "min": 30,
+      "max": 1000
+    },
+    "scan-radius": {
+      "type": "int",
+      "name": "Frame Scan Radius",
+      "description": "How many frames before and after every HOLD/RELEASE are tested.",
+      "default": 12,
+      "min": 1,
+      "max": 120
+    },
+    "post-macro-validation": {
+      "type": "int",
+      "name": "Post-macro Validation Frames",
+      "description": "Extra frames a candidate must survive after the last recorded input.",
+      "default": 120,
+      "min": 0,
+      "max": 2400
+    },
+    "auto-analyze": {
+      "type": "bool",
+      "name": "Analyze after recording",
+      "description": "Start frame-window analysis automatically when recording is stopped.",
+      "default": true
+    },
+    "show-trajectory": {
+      "type": "bool",
+      "name": "Show trajectory",
+      "description": "Draw the actually simulated player path during record/playback/analyze.",
+      "default": true
+    },
+    "open-menu": {
+      "type": "keybind",
+      "name": "Open bot menu",
+      "default": "F8"
+    },
+    "toggle-record": {
+      "type": "keybind",
+      "name": "Start/stop recording",
+      "default": "F6"
+    },
+    "playback": {
+      "type": "keybind",
+      "name": "Playback last macro",
+      "default": "F7"
+    },
+    "toggle-pause": {
+      "type": "keybind",
+      "name": "Toggle frame-step pause",
+      "default": "F4"
+    },
+    "frame-step": {
+      "type": "keybind",
+      "name": "Frame step",
+      "default": "F5"
+    },
+    "toggle-trajectory": {
+      "type": "keybind",
+      "name": "Show/hide trajectory",
+      "default": "Ctrl+F5"
+    },
+    "analyze-last": {
+      "type": "keybind",
+      "name": "Analyze last macro",
+      "default": "Ctrl+F7"
+    },
+    "analysis-speed": {
+      "type": "int",
+      "name": "Analysis Speed",
+      "description": "Simulation speed multiplier used during automatic branch analysis.",
+      "default": 8,
+      "min": 1,
+      "max": 64
+    },
+    "exhaustive-scan": {
+      "type": "bool",
+      "name": "Exhaustive Scan",
+      "description": "Test all offsets even after a failed frame. Slower, but can reveal disjoint/non-contiguous passing islands.",
+      "default": false
+    }
+  }
+}

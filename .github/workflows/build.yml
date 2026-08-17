@@ -1,0 +1,39 @@
+name: Build and Test
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  core-tests:
+    name: Portable core tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure portable core
+        run: cmake -S . -B build-core -DFWA_CORE_ONLY=ON -DFWA_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Release
+      - name: Build portable core
+        run: cmake --build build-core --config Release --parallel
+      - name: Run tests
+        run: ctest --test-dir build-core --output-on-failure -C Release
+
+  build-win64:
+    name: Geode Win64 build
+    needs: core-tests
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Geode mod
+        id: build
+        uses: geode-sdk/build-geode-mod@main
+        with:
+          sdk: v5.8.2
+          build-config: RelWithDebInfo
+          export-pdb: true
+      - name: Upload build
+        uses: actions/upload-artifact@v4
+        with:
+          name: FrameWindowAnalyzer-Win64
+          path: ${{ steps.build.outputs.build-output }}
