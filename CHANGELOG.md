@@ -1,3 +1,10 @@
+# FWBot v0.2.3
+
+- Fixed Record staying Idle by adopting the actual last placed Practice checkpoint instead of calling `createCheckpoint()` out of GD's placement flow.
+- Record now restores the checkpoint first and only starts input capture after `loadFromCheckpoint` completes.
+- Added explicit UI/status errors instead of silent Record failures.
+- Supplemental Practice state is captured after checkpoint load, keeping anchor state aligned with frame 0.
+
 # Changelog
 
 ## v0.2.2 — runtime stability rebuild

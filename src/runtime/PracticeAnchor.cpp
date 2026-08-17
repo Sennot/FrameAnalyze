@@ -22,25 +22,43 @@ void PracticeAnchor::clear() {
 
 bool PracticeAnchor::capture(PlayLayer* layer) {
     if (!layer) return false;
-    clear();
 
-    auto* checkpoint = layer->createCheckpoint();
+    // FWBot recording is Practice-checkpoint based. Do not call
+    // PlayLayer::createCheckpoint() here: that is part of GD's checkpoint
+    // placement flow and may legitimately return nullptr when invoked out of
+    // that flow. Instead, adopt the checkpoint the player actually placed.
+    auto* checkpoint = layer->getLastCheckpoint();
     if (!checkpoint) {
-        FileLogger::get().debug("[Practice] createCheckpoint returned null");
+        FileLogger::get().debug("[Practice] no placed Practice checkpoint; Record refused");
         return false;
     }
 
+    clear();
     checkpoint->retain();
     m_checkpoint = checkpoint;
     m_owner = layer;
+    m_hasSupplemental = false;
+    m_inputs = {};
+
+    FileLogger::get().debug("[Practice] adopted last placed GD checkpoint as FWBot anchor");
+    return true;
+}
+
+bool PracticeAnchor::captureSupplemental(PlayLayer* layer) {
+    if (!validFor(layer)) return false;
+
+    // This is called only after GD has actually loaded the retained Practice
+    // checkpoint. Capturing here keeps the supplemental state aligned with the
+    // checkpoint instead of accidentally snapshotting a later live position.
     m_gameState = layer->m_gameState;
     if (layer->m_effectManager) {
         layer->m_effectManager->saveToState(m_effectState);
         m_hasSupplemental = true;
+    } else {
+        m_hasSupplemental = false;
     }
 
-    // Store held button state explicitly. CheckpointObject is the primary world state,
-    // while these flags let replay validation know which RELEASE inputs are legal at frame 0.
+    m_inputs = {};
     if (layer->m_player1) {
         auto const& held = layer->m_player1->m_holdingButtons;
         if (auto it = held.find(1); it != held.end()) m_inputs.p1[1] = it->second;
@@ -54,7 +72,7 @@ bool PracticeAnchor::capture(PlayLayer* layer) {
         m_inputs.p2[3] = layer->m_player2->m_holdingRight;
     }
 
-    FileLogger::get().debug("[Practice] captured current gameplay checkpoint as FWBot anchor");
+    FileLogger::get().debug("[Practice] captured supplemental state after checkpoint load");
     return true;
 }
 
@@ -71,9 +89,9 @@ bool PracticeAnchor::restoreNow(PlayLayer* layer) const {
 }
 
 void PracticeAnchor::applySupplemental(PlayLayer* layer) const {
-    if (!validFor(layer)) return;
+    if (!validFor(layer) || !m_hasSupplemental) return;
     layer->m_gameState = m_gameState;
-    if (m_hasSupplemental && layer->m_effectManager) {
+    if (layer->m_effectManager) {
         // Geode/GD 2.2081 binds loadFromState as taking EffectManagerState&,
         // even though restoring should not mutate FWBot's saved anchor. Pass a
         // working copy so this method can remain const and repeated restores

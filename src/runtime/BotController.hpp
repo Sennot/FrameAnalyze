@@ -75,6 +75,9 @@ public:
     [[nodiscard]] bool trajectoryVisible() const { return m_trajectoryVisible; }
     [[nodiscard]] bool trajectoryDrawing() const { return m_trajectory.drawing(); }
     [[nodiscard]] bool hasPracticeAnchor() const { return m_anchor.checkpoint() != nullptr; }
+    [[nodiscard]] bool hasPlacedPracticeCheckpoint() const;
+    [[nodiscard]] bool recordingArming() const { return m_recordingArming; }
+    [[nodiscard]] std::string const& lastNotice() const { return m_lastNotice; }
     [[nodiscard]] bool speedhackEnabled() const { return m_speedhack.enabled(); }
     [[nodiscard]] bool speedhackAudio() const { return m_speedhack.audioFollow(); }
     [[nodiscard]] float speedhackSpeed() const { return m_speedhack.speed(); }
@@ -90,6 +93,7 @@ private:
     void requestAnchorRestore(PlayLayer* layer);
     int settingInt(char const* key, int fallback) const;
     bool settingBool(char const* key, bool fallback) const;
+    void setNotice(std::string message);
 
     BotMode m_mode = BotMode::Idle;
     Macro m_recordingMacro;
@@ -109,6 +113,8 @@ private:
     int m_stepRequests = 0;
     bool m_trajectoryVisible = false;
     bool m_forceAnchorLoad = false;
+    bool m_recordingArming = false;
+    std::string m_lastNotice;
 };
 
 } // namespace fwa

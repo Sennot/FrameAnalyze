@@ -1,37 +1,34 @@
-FWBot v0.2.2 source manifest
-============================
-
-9f47d29ac2eda890bdf641368fe8712cb05f04fa6485c02fb8813706a27fa9a5        6658  .github/workflows/build.yml
-2db7711609468383017c670fc897867e882338f31184a776a25a25626e50c7f3          57  .gitignore
-7bd1f4d0c41dbf9ab8eacb1df28aa067f6dc0ae09c817a7fb5d921f0c4eee6e9        2731  BINDINGS_AUDIT.md
-8ace79faeafcea0e0ec528c863d6744da445790d89f0f06e53335f326a1d0f2c        5007  CHANGELOG.md
-6f7011fb7d1e5ab2ae9a4dabeaa77d4e8246962b85639f3df84e20ed34969467        2623  CMakeLists.txt
-a499d07ef63ad47abad44ad1be0ba92722c2d9c6d1b0ebcfeecb526d332289d6         721  CREDITS.md
-371437544589db2f4039247db74fbc978d8ab1953f006d49e16479370d8a66f3        2129  DEBUGGING.md
-3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986       35149  LICENSE
-6e38b56b1a5e991671d21b095fd915005761927e4f321a7d6114586610c424ee        4851  README.md
-cfa1a83fa7818d7341495250437090a741151f6e6cbcd91af4f2bf13601e175a        1885  TEST_RESULTS.txt
-3a8545555f8563c9a7698f85897690178963ffcabfd9f6485b33fa8d4942d7d3        2839  mod.json
-6cc181e1ae181e417bab29c53a16cebe34885ff10aadb206ce0a4e817c437fd4        1860  src/core/FrameWindow.cpp
-8f2729991c1313f967cf693dc9c99f5fb4051f44d3f7ccbb1f06504f761229c9         457  src/core/FrameWindow.hpp
-545d49ef5d6a8753d41cd93b9fa09aaa08144ab610a34df124c0701803473c6d        3843  src/core/NaNDLExport.cpp
-2899d8907ebb2581f62e25faa5b75402470d34db74bfda12a7ae6030c50e78ad         666  src/core/NaNDLExport.hpp
-7dd4015ad6606282240f1a8079cc7c1df19cad88b2ca0fbdf4e49d0cff90042b        1804  src/core/Types.hpp
-840fb0930758557516f50bf08af44f477794e52489333649ac46d7799abb8b7c        5710  src/hooks/GameHooks.cpp
-683e00086505d38e9e79ee770898d5581bccc335390db42efcfb6c3f39a30a09        1595  src/main.cpp
-cf8971f088c6a9e17425c03e87660f4574517d70682600b0a325e4b562b1e1d0        5660  src/runtime/AnalysisSession.cpp
-167d34415fe3e7625eeac6f1be3eb05d3d102ad0beb6fdfdde8eb365acc5e57c        2214  src/runtime/AnalysisSession.hpp
-f333bb0cb4127a2c9bea9d73fb9b83d762ba25bf7ac72348739832c5c37730da       16590  src/runtime/BotController.cpp
-4d46ab57d97e1821593603a0d1c32a32d5ef0f9f5314566509e4305d589018ee        4225  src/runtime/BotController.hpp
-8f62f7f01743bb3ea88780683a08f897a68f59e0ca49bb4c19dd12e73ea47f7f        4475  src/runtime/FileLogger.cpp
-d302b9121fff459194b860ae9feee100eb270d694156aa807465afb5d89015f7         902  src/runtime/FileLogger.hpp
-ea21b826c240a3860c579411d61cf39ed95c9d754e218e07a705f8a537b54ea8        2759  src/runtime/PracticeAnchor.cpp
-d672b9ff4ddbb41d5a7f8f1834f2f4a4a639e60caadefe3f2539e6103bface75         772  src/runtime/PracticeAnchor.hpp
-a5102983698019672f4e404175e787b170a019e77f57ac0dc9277d6c3a8a994f        1309  src/runtime/Speedhack.cpp
-7d11c93b4bec0fd49a055e3994f8a5fd00de317273eb56d5df6c26dfae01b39e         795  src/runtime/Speedhack.hpp
-8d7a10b3ecca4feb5f01ea020dfa347cb19418b34962a59267c0510a61e12781        5428  src/runtime/TrajectoryOverlay.cpp
-4badf941122ea20e001922b00d4268fa45d87b1d94d4aa17dcd94733dee2c40b        1023  src/runtime/TrajectoryOverlay.hpp
-a818db054f8e9c7befaf12988550d19c6396119773131d45700c05902610fb37       13659  src/ui/ImGuiOverlay.cpp
-58e9c5795de5a012826d69a6cb0029708f3d27ec8817124c92aa0071326c2579         733  src/ui/ImGuiOverlay.hpp
-0c03f1d3c38c19514e884c56baccb78da490ecbf0cd41d2165d679342cee95e5        6503  tests/core_tests.cpp
-67c06c56effb2d283bb065783e362989495a2cfb1c900a21736b02c1b27832a2        3791  tests/source_contract_tests.py
+9f47d29ac2eda890bdf641368fe8712cb05f04fa6485c02fb8813706a27fa9a5  ./.github/workflows/build.yml
+2db7711609468383017c670fc897867e882338f31184a776a25a25626e50c7f3  ./.gitignore
+7bd1f4d0c41dbf9ab8eacb1df28aa067f6dc0ae09c817a7fb5d921f0c4eee6e9  ./BINDINGS_AUDIT.md
+19f211a085d8b769b9599fbbe78a5159f99dd7546e75053c32ffccd788844ae6  ./CHANGELOG.md
+6bdb65ee879bdb7cce98feb99b0a26960a72398c248a6719083ceda9d0502e1f  ./CMakeLists.txt
+a499d07ef63ad47abad44ad1be0ba92722c2d9c6d1b0ebcfeecb526d332289d6  ./CREDITS.md
+371437544589db2f4039247db74fbc978d8ab1953f006d49e16479370d8a66f3  ./DEBUGGING.md
+3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986  ./LICENSE
+c9aa1ec3215a90b0e37bef7d002460e102ba5b84485dd2761fcdcf9abf9c77bd  ./README.md
+2621e020475d5c9d4e02ae3d07a9aae77331aff4171ede47751710dd983e8763  ./TEST_RESULTS.txt
+7ca35e31f5b46b7c848abe0e6102731397a27f6dd59f0f45a847708a13a942aa  ./mod.json
+6cc181e1ae181e417bab29c53a16cebe34885ff10aadb206ce0a4e817c437fd4  ./src/core/FrameWindow.cpp
+8f2729991c1313f967cf693dc9c99f5fb4051f44d3f7ccbb1f06504f761229c9  ./src/core/FrameWindow.hpp
+545d49ef5d6a8753d41cd93b9fa09aaa08144ab610a34df124c0701803473c6d  ./src/core/NaNDLExport.cpp
+2899d8907ebb2581f62e25faa5b75402470d34db74bfda12a7ae6030c50e78ad  ./src/core/NaNDLExport.hpp
+7dd4015ad6606282240f1a8079cc7c1df19cad88b2ca0fbdf4e49d0cff90042b  ./src/core/Types.hpp
+840fb0930758557516f50bf08af44f477794e52489333649ac46d7799abb8b7c  ./src/hooks/GameHooks.cpp
+683e00086505d38e9e79ee770898d5581bccc335390db42efcfb6c3f39a30a09  ./src/main.cpp
+cf8971f088c6a9e17425c03e87660f4574517d70682600b0a325e4b562b1e1d0  ./src/runtime/AnalysisSession.cpp
+167d34415fe3e7625eeac6f1be3eb05d3d102ad0beb6fdfdde8eb365acc5e57c  ./src/runtime/AnalysisSession.hpp
+53d24af01f0d30fd264dba15b26e15988ce13860b4d755c7b475c474c5d4b666  ./src/runtime/BotController.cpp
+4ed8bd0d5ac8a759d66537a5840be4d610664399c0c7f42dd47e31bdaf3d54cd  ./src/runtime/BotController.hpp
+8f62f7f01743bb3ea88780683a08f897a68f59e0ca49bb4c19dd12e73ea47f7f  ./src/runtime/FileLogger.cpp
+d302b9121fff459194b860ae9feee100eb270d694156aa807465afb5d89015f7  ./src/runtime/FileLogger.hpp
+724d7f263e21aa72805969d82980cad911fd102c2cdc884534f03c291811a9b6  ./src/runtime/PracticeAnchor.cpp
+4ca6f7ccd0603bc9315d93d3938dca3b49d57271bb8ecdb024d7783ccddbd125  ./src/runtime/PracticeAnchor.hpp
+a5102983698019672f4e404175e787b170a019e77f57ac0dc9277d6c3a8a994f  ./src/runtime/Speedhack.cpp
+7d11c93b4bec0fd49a055e3994f8a5fd00de317273eb56d5df6c26dfae01b39e  ./src/runtime/Speedhack.hpp
+8d7a10b3ecca4feb5f01ea020dfa347cb19418b34962a59267c0510a61e12781  ./src/runtime/TrajectoryOverlay.cpp
+4badf941122ea20e001922b00d4268fa45d87b1d94d4aa17dcd94733dee2c40b  ./src/runtime/TrajectoryOverlay.hpp
+92a9eec2c89e5f0dd374239f68ac10a874bb7286de8d82ced6ee6f4b846a386c  ./src/ui/ImGuiOverlay.cpp
+58e9c5795de5a012826d69a6cb0029708f3d27ec8817124c92aa0071326c2579  ./src/ui/ImGuiOverlay.hpp
+0c03f1d3c38c19514e884c56baccb78da490ecbf0cd41d2165d679342cee95e5  ./tests/core_tests.cpp
+c62160e19f65d17a94390554fcd4ecd07bc9e06aeab118c873d5e66a50704776  ./tests/source_contract_tests.py

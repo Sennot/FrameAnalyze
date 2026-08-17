@@ -240,8 +240,13 @@ void ImGuiOverlay::drawWindow() {
 
             ImGui::Spacing();
             ImGui::Text("Inputs: %zu", bot.lastMacro().inputs.size());
-            ImGui::Text("Practice anchor: %s", bot.hasPracticeAnchor() ? "ready" : "none");
-            helpText("Recommended: place a Practice checkpoint before the timing, press Record, then use realtime or Frame Stepper. Record itself never freezes gameplay.");
+            ImGui::Text("Placed Practice checkpoint: %s", bot.hasPlacedPracticeCheckpoint() ? "ready" : "none");
+            ImGui::Text("FWBot anchor: %s", bot.hasPracticeAnchor() ? "ready" : "none");
+            if (!bot.lastNotice().empty()) {
+                ImGui::Spacing();
+                ImGui::TextWrapped("%s", bot.lastNotice().c_str());
+            }
+            helpText("Place a Practice checkpoint first. Record restores to that exact checkpoint, then frame 0 begins after the checkpoint has loaded.");
             ImGui::EndTabItem();
         }
 

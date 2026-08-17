@@ -11,6 +11,7 @@ public:
     ~PracticeAnchor();
 
     bool capture(PlayLayer* layer);
+    bool captureSupplemental(PlayLayer* layer);
     void clear();
     [[nodiscard]] bool validFor(PlayLayer* layer) const;
     [[nodiscard]] bool restoreNow(PlayLayer* layer) const;

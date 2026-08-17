@@ -78,7 +78,7 @@ assert 'ImGui::BeginTabBar("##fwbot-tabs")' in ui
 assert 'fwbotFunctionKey = wParam >= VK_F3 && wParam <= VK_F8' in ui
 
 mod = json.loads(text('mod.json'))
-assert mod['version'] == 'v0.2.2'
+assert mod['version'] == 'v0.2.3'
 assert mod['geode'] == '5.8.2'
 assert mod['gd']['win'] == '2.2081'
 assert 'show-trajectory' not in mod['settings']
@@ -86,3 +86,17 @@ assert mod['settings']['analysis-speed']['max'] <= 16
 assert mod['settings']['trajectory-length']['default'] <= 30
 
 print('source contract tests: OK')
+
+
+# Practice recording must adopt a real user-placed checkpoint and never call
+# createCheckpoint() from the Record button path.
+practice = text('src/runtime/PracticeAnchor.cpp')
+assert 'layer->getLastCheckpoint()' in practice
+assert 'layer->createCheckpoint()' not in practice
+assert 'captureSupplemental' in practice
+bot = text('src/runtime/BotController.cpp')
+assert 'm_recordingArming = true;' in bot
+assert 'Record failed: place a Practice checkpoint first.' in bot
+assert 'if (m_mode != BotMode::Recording || m_recordingArming || m_injecting) return;' in bot
+ui = text('src/ui/ImGuiOverlay.cpp')
+assert 'Placed Practice checkpoint:' in ui

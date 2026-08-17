@@ -30,6 +30,16 @@ bool BotController::settingBool(char const* key, bool fallback) const {
     catch (...) { return fallback; }
 }
 
+void BotController::setNotice(std::string message) {
+    m_lastNotice = std::move(message);
+    if (!m_lastNotice.empty()) FileLogger::get().debug(std::string("[Status] ") + m_lastNotice);
+}
+
+bool BotController::hasPlacedPracticeCheckpoint() const {
+    auto* play = PlayLayer::get();
+    return play && play->getLastCheckpoint() != nullptr;
+}
+
 void BotController::initialize() {
     FileLogger::get().initialize();
     // Trajectory is runtime-only and always starts OFF. Older builds persisted
@@ -39,7 +49,7 @@ void BotController::initialize() {
     m_trajectory.setVisible(false);
     m_speedhack.setAudioFollow(settingBool("speedhack-audio", true));
     syncAudio();
-    FileLogger::get().debug("[FWBot] initialized v0.2.2 scheduler architecture");
+    FileLogger::get().debug("[FWBot] initialized v0.2.3 practice-record fix");
 }
 
 void BotController::fillLevelMetadata(PlayLayer* layer, Macro& macro) {
@@ -56,7 +66,7 @@ void BotController::fillLevelMetadata(PlayLayer* layer, Macro& macro) {
 bool BotController::captureAnchor(PlayLayer* layer, Macro& macro) {
     if (!m_anchor.capture(layer)) return false;
     macro.practiceAnchored = true;
-    macro.anchorInputs = m_anchor.inputs();
+    macro.anchorInputs = {};
     return true;
 }
 
@@ -82,19 +92,30 @@ void BotController::toggleRecording(PlayLayer* layer) {
 }
 
 void BotController::startRecording(PlayLayer* layer) {
-    if (!layer || layer->m_isPaused) return;
+    if (!layer) {
+        setNotice("Record failed: open a level first.");
+        return;
+    }
+    if (layer->m_isPaused) {
+        setNotice("Record failed: close the in-game Pause menu first.");
+        return;
+    }
 
-    // A stale stepper state was the main reason v0.2.1 could appear frozen when
-    // Record was pressed. Recording always starts realtime; the user can turn
-    // the stepper back on afterwards and continue recording frame-by-frame.
     setFrameStepper(false);
     cancelAutomation();
 
     m_recordingMacro = {};
     fillLevelMetadata(layer, m_recordingMacro);
-    if (!captureAnchor(layer, m_recordingMacro)) return;
+    if (!captureAnchor(layer, m_recordingMacro)) {
+        setNotice("Record failed: place a Practice checkpoint first.");
+        return;
+    }
 
+    // Arm recording, then force a real GD restore to the retained checkpoint.
+    // Input capture stays disabled until loadFromCheckpoint has completed, so
+    // frame 0 always means the actual Practice anchor state.
     m_mode = BotMode::Recording;
+    m_recordingArming = true;
     m_currentFrame = 0;
     m_playbackCursor = 0;
     m_sequence = 0;
@@ -102,8 +123,8 @@ void BotController::startRecording(PlayLayer* layer) {
     m_branchResolved = false;
     layer->m_extraDelta = 0.0f;
     m_trajectory.reset(layer);
-    syncAudio();
-    FileLogger::get().debug("[Record] started from current Practice/gameplay state; scheduler remains live");
+    setNotice("Record: loading Practice checkpoint...");
+    requestAnchorRestore(layer);
 }
 
 void BotController::stopRecording(PlayLayer* layer, bool allowAutoAnalyze) {
@@ -111,6 +132,7 @@ void BotController::stopRecording(PlayLayer* layer, bool allowAutoAnalyze) {
 
     m_lastMacro = m_recordingMacro;
     m_mode = BotMode::Idle;
+    m_recordingArming = false;
     m_stepRequests = 0;
 
     std::ostringstream msg;
@@ -118,6 +140,7 @@ void BotController::stopRecording(PlayLayer* layer, bool allowAutoAnalyze) {
         << " lastFrame=" << m_lastMacro.lastFrame()
         << " practiceAnchor=" << (m_lastMacro.practiceAnchored ? "yes" : "no");
     FileLogger::get().debug(msg.str());
+    setNotice(m_lastMacro.inputs.empty() ? "Recording stopped: no inputs captured." : "Recording stopped.");
 
     if (allowAutoAnalyze && layer && !m_lastMacro.inputs.empty() && settingBool("auto-analyze", true)) {
         startAnalysis(layer);
@@ -258,7 +281,7 @@ void BotController::syncAudio() {
 }
 
 void BotController::recordInput(bool pressed, int button, bool player1) {
-    if (m_mode != BotMode::Recording || m_injecting) return;
+    if (m_mode != BotMode::Recording || m_recordingArming || m_injecting) return;
 
     MacroInput input;
     input.frame = m_currentFrame;
@@ -287,13 +310,13 @@ void BotController::injectForCurrentFrame(PlayLayer* layer, Macro const& macro) 
 }
 
 void BotController::beforePhysicsStep(PlayLayer* layer) {
-    if (!layer) return;
+    if (!layer || m_recordingArming) return;
     if (m_mode == BotMode::Playback) injectForCurrentFrame(layer, m_lastMacro);
     else if (m_mode == BotMode::Analyzing) injectForCurrentFrame(layer, m_analysis.playbackMacro());
 }
 
 void BotController::afterPhysicsStep(PlayLayer* layer) {
-    if (!layer) return;
+    if (!layer || m_recordingArming) return;
     if (m_pendingReset) return;
 
     ++m_currentFrame;
@@ -347,7 +370,7 @@ void BotController::onReset(PlayLayer* layer) {
     m_trajectory.reset(layer);
     syncAudio();
 
-    if (m_mode == BotMode::Recording) {
+    if (m_mode == BotMode::Recording && !m_recordingArming) {
         m_recordingMacro.inputs.clear();
         m_sequence = 0;
         FileLogger::get().debug("[Record] attempt reset -> partial inputs discarded; recording continues from anchor");
@@ -366,7 +389,26 @@ void BotController::restartCurrentBranch(PlayLayer* layer) {
 void BotController::onForcedCheckpointLoaded(PlayLayer* layer) {
     if (!m_forceAnchorLoad) return;
     m_forceAnchorLoad = false;
-    m_anchor.applySupplemental(layer);
+
+    if (m_recordingArming) {
+        if (!m_anchor.captureSupplemental(layer)) {
+            m_recordingArming = false;
+            m_mode = BotMode::Idle;
+            setNotice("Record failed: could not snapshot the loaded checkpoint.");
+            return;
+        }
+        m_recordingMacro.anchorInputs = m_anchor.inputs();
+        m_recordingArming = false;
+        m_currentFrame = 0;
+        m_playbackCursor = 0;
+        m_sequence = 0;
+        m_recordingMacro.inputs.clear();
+        setNotice("Recording.");
+        FileLogger::get().debug("[Record] started at loaded Practice checkpoint; frame=0");
+    } else {
+        m_anchor.applySupplemental(layer);
+    }
+
     if (layer) layer->m_extraDelta = 0.0f;
     m_trajectory.reset(layer);
     syncAudio();
@@ -396,7 +438,9 @@ void BotController::onPlayLayerExit(PlayLayer* layer) {
     m_speedhack.resetAudio();
     m_anchor.clear();
     m_trajectory.reset(nullptr);
+    m_recordingArming = false;
     m_currentFrame = 0;
+    m_lastNotice.clear();
     FileLogger::get().debug("[FWBot] PlayLayer exit: runtime state cleared");
 }
 
@@ -466,7 +510,7 @@ std::string BotController::statusText() const {
     std::ostringstream out;
     switch (m_mode) {
         case BotMode::Idle: out << "Idle"; break;
-        case BotMode::Recording: out << "Recording"; break;
+        case BotMode::Recording: out << (m_recordingArming ? "Record: loading checkpoint" : "Recording"); break;
         case BotMode::Playback: out << "Playback"; break;
         case BotMode::Analyzing: out << "Analyzing " << m_analysis.completedJobs() << '/' << m_analysis.totalJobs(); break;
     }

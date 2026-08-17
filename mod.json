@@ -5,7 +5,7 @@
   },
   "id": "framewindow.analyzer",
   "name": "FWBot",
-  "version": "v0.2.2",
+  "version": "v0.2.3",
   "developer": "FWBot Contributors",
   "description": "Stable practice-based macro bot with scheduler-level frame stepping, speedhack, predictive trajectory and automatic HOLD/RELEASE frame-window analysis for NaNDL.",
   "settings": {

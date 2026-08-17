@@ -1,4 +1,4 @@
-# FWBot v0.2.2
+# FWBot v0.2.3
 
 FWBot is a Windows Geode bot for Geometry Dash 2.2081 / Geode 5.8.2 focused on Practice recording, deterministic playback and automatic HOLD/RELEASE Frame Window analysis for NaNDL.
 
@@ -24,7 +24,7 @@ FWBot is a Windows Geode bot for Geometry Dash 2.2081 / Geode 5.8.2 focused on P
 
 All binds are editable in Geode settings.
 
-## v0.2.2 stability architecture
+## v0.2.3 stability architecture
 
 ### Scheduler-level Frame Stepper
 
