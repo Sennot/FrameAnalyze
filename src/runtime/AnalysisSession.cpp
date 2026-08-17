@@ -94,7 +94,10 @@ bool AnalysisSession::makeCandidate(AnalysisJob const& job) {
 
     auto end = std::max(m_candidate.lastFrame(), static_cast<std::uint32_t>(shifted));
     auto extra = static_cast<std::uint64_t>(m_postMacroValidationFrames);
-    auto pass64 = static_cast<std::uint64_t>(end) + extra;
+    // m_currentFrame is the frame about to be processed; afterPhysicsStep then
+    // increments it. Therefore an input at frame N has actually run only when
+    // the counter reaches N+1. Add validation frames after that point.
+    auto pass64 = static_cast<std::uint64_t>(end) + 1u + extra;
     m_passFrame = static_cast<std::uint32_t>(std::min<std::uint64_t>(pass64, UINT32_MAX));
     return true;
 }

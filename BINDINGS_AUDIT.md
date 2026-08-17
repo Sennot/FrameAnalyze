@@ -1,48 +1,58 @@
-# Geode bindings audit
+# Geode bindings audit — FWBot v0.2.2
 
-Target: Geode SDK v5.8.2, Geometry Dash 2.2081, Win64.
+Target: Geode SDK **5.8.2**, Geometry Dash **2.2081**, Win64.
 
-## Previously confirmed by real GitHub Actions
-The v0.1.4 codebase reached Geode codegen/generated bindings and compiled the runtime after fixing the keybind listener contract. The following v0.1 hook signatures were accepted:
+## Contracts already proven by earlier real Actions builds
+
+Earlier FWBot builds reached generated Geode bindings and compiled the established hooks after fixing callback/API issues:
 
 - `GJBaseGameLayer::handleButton(bool, int, bool)`
-- `GJBaseGameLayer::update(float)`
-- `GJBaseGameLayer::getModifiedDelta(float)`
 - `PlayLayer::resetLevel()`
 - `PlayLayer::destroyPlayer(PlayerObject*, GameObject*)`
 - `PlayLayer::levelComplete()`
 - `PlayLayer::onExit()`
+- `GJEffectManager::loadFromState(EffectManagerState&)` non-const reference contract
+- `CCEGLView` modifier requires `<Geode/modify/CCEGLView.hpp>`
+- Geode keybind EventV3 callback is const-invocable and returns `bool`
 
-The v0.2 GameLayer/PlayLayer hooks intentionally keep those already-proven signatures.
+## v0.2.2 timing surfaces
 
-## Keybind listener contract
-`listenForKeybindSettingPresses` requires a const-invocable bool callback compatible with:
+The old manual gameplay-update loop was removed. New timing code uses:
 
-```cpp
-(Keybind const&, bool down, bool repeat, double timestamp) -> bool
-```
+- `<Geode/modify/CCScheduler.hpp>` + `CCScheduler::update(float)` for freeze/step/speed control;
+- `GJBaseGameLayer::processCommands(float, bool, bool)` as the per-physics replay/analyzer frame hook;
+- `PlayLayer::m_extraDelta = 0` when entering/leaving step mode and before a one-step scheduler update.
 
-`src/main.cpp` keeps the v0.1.4 `KeybindPressListener::operator()(...) const` implementation and a `static_assert` for this contract.
+`tests/source_contract_tests.py` rejects a source tree that reintroduces manual `GJBaseGameLayer::update(bot.fixedDt())` driving or omits the scheduler modifier header.
 
-## New v0.2 Geode-facing surfaces
-The architecture rebuild additionally uses:
+## Practice / analyzer surfaces
 
 - `PlayLayer::createCheckpoint()` / `loadFromCheckpoint(CheckpointObject*)`
-- `GJGameState` and `EffectManagerState`
+- `GJGameState`
+- `EffectManagerState`
 - `GJEffectManager::saveToState` / `loadFromState`
-- `PlayerObject::copyAttributes`, `pushButton`, `releaseButton`, `update`, `updateRotation`
-- `FMODAudioEngine::m_system` + FMOD master `ChannelGroup::setPitch`
-- `CCEGLView::swapBuffers()` for the ImGui render hook
+- real `PlayLayer::destroyPlayer`/`levelComplete` outcomes for analyzer verdicts
 
-These are audited against the same Geode/Silicate API surface, but the included GitHub Actions Win64 job remains the authoritative compiler/linker check for v0.2 because the sandbox cannot run the Windows GD/Geode toolchain.
+The analyzer runs exact `1/240` scheduler ticks and blocks further `processCommands` work after a branch is resolved until the Practice anchor reset is performed. This avoids contaminating the next candidate with the old branch world at accelerated analysis speed.
 
-## UI/link audit
-Dear ImGui uses its standard Win32 and OpenGL3 backends. CMake explicitly links `opengl32`, `user32`, `gdi32`, and `imm32` on the Win64 mod target.
+## Trajectory surfaces
 
-## v0.2.1 findings from real Win64 build
-The user's v0.2.0 GitHub Actions reached step 41/47. The build proved that Dear ImGui itself linked (`fwbot_imgui.lib`) and that `main.cpp`, `BotController.cpp`, `FileLogger.cpp`, `Speedhack.cpp`, and `TrajectoryOverlay.cpp` compiled. Two remaining compile contracts were exposed:
+- `PlayerObject::copyAttributes`
+- `pushButton` / `releaseButton`
+- `update` / `updateRotation`
+- `GJBaseGameLayer::checkCollisions`
+- fake-player destruction guarded from the real attempt
+- explicit `removeFromParentAndCleanup(true)` cleanup for every trajectory/fake-player node
 
-1. `GJEffectManager::loadFromState(EffectManagerState&)` is non-const in the generated GD 2.2081 binding. `PracticeAnchor::applySupplemental` now copies `m_effectState` into a working state before calling the binding, preserving deterministic repeated restores.
-2. `Modify<..., cocos2d::CCEGLView>` requires the generated class-specific modifier header. `ImGuiOverlay.cpp` now includes `<Geode/modify/CCEGLView.hpp>`.
+Trajectory remains a visual system only and cannot decide `N_i`.
 
-`tests/source_contract_tests.py` enforces both contracts in the portable CI job.
+## ImGui / Win32
+
+- `<Geode/modify/CCEGLView.hpp>` + `CCEGLView::swapBuffers()`
+- Dear ImGui Win32/OpenGL3 backends
+- `opengl32`, `user32`, `gdi32`, `imm32` explicitly linked
+- persistent `fwbot_imgui.ini` stored under `Mod::get()->getSaveDir()`
+
+## CI authority
+
+Portable tests can validate Frame Window logic and source contracts in this sandbox. The included Windows GitHub Actions job is still the authoritative full Geode compile/link test because the local environment does not contain Geometry Dash / Win64 Geode runtime libraries.

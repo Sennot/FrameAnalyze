@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.2.2 — runtime stability rebuild
+- Move Frame Stepper and speedhack timing control to `CCScheduler::update`; remove the old manual `GJBaseGameLayer::update` loop that could freeze Record/Stepper state.
+- Count and inject replay inputs from the real physics-loop `processCommands` path, including accelerated multi-tick renders.
+- Starting Record now clears stale stepper state and leaves scheduler gameplay live; user can enable stepper afterwards for frame-by-frame recording.
+- Prevent a newly prepared analyzer branch from running on the previous branch world before the Practice anchor reset completes.
+- Fix trajectory node leaks: old `CCDrawNode`/fake players are removed from parent on reset/toggle/exit instead of only dropping pointers.
+- Make trajectory runtime-only and OFF on launch; remove the persisted `show-trajectory` setting that could make lines appear unexpectedly after upgrading.
+- Add collision-bounded fake-player trajectory with world/effect save/restore; analyzer verdicts remain independent real gameplay branches.
+- Re-apply FMOD master pitch continuously while manual speedhack audio-follow is active, so speed changes take effect immediately and survive attempt resets.
+- Run automatic analysis as 1–16 exact `1/240` scheduler ticks per visual frame instead of feeding one oversized variable delta.
+- Fix an analyzer/playback horizon off-by-one: the final input frame is now guaranteed to execute before PASS can be declared.
+- Restore the original Practice anchor after the final analyzer branch instead of leaving the player inside the simulation.
+- Rework ImGui into a compact black tabbed UI with right-side safe default placement, screen clamping and persistent draggable position.
+- Keep F3–F8 FWBot hotkeys passing through while ImGui has keyboard focus, so F8 can always close the menu.
+- Prevent Frame Stepper from being armed in menus or while Geometry Dash PauseLayer is active, avoiding a stale freeze on level entry/resume.
+- Keep the 4-frame-gap regression: recorded second valid frame still yields `Early=1`, `Late=2`, `N_i=4`.
+
 ## v0.2.1 — Geode 5.8.2 binding fixes
 - Fix PracticeAnchor restore on GD 2.2081: `GJEffectManager::loadFromState` takes a non-const `EffectManagerState&`, so FWBot now restores from a working copy while preserving the captured anchor for repeated playback/analyze branches.
 - Include the required generated `<Geode/modify/CCEGLView.hpp>` header before applying the ImGui `CCEGLView::swapBuffers()` hook.

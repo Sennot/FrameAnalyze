@@ -43,19 +43,19 @@ public:
     void setSpeedhackEnabled(bool enabled);
     void setSpeedhackSpeed(float speed);
     void setSpeedhackAudio(bool enabled);
+    void syncAudio();
 
     void recordInput(bool pressed, int button, bool player1);
     void beforePhysicsStep(PlayLayer* layer);
     void afterPhysicsStep(PlayLayer* layer);
+    void onVisualFrame(PlayLayer* layer);
     void beforeReset(PlayLayer* layer);
     void onReset(PlayLayer* layer);
     void onDeath(std::uint32_t frame, GameObject* cause);
     void onLevelComplete();
     void onPlayLayerExit(PlayLayer* layer);
 
-    [[nodiscard]] bool shouldInterceptUpdate() const;
-    [[nodiscard]] bool fixedDeltaActive() const;
-    int automatedStepsForUpdate(float realDt);
+    [[nodiscard]] float schedulerSpeed() const;
     [[nodiscard]] float fixedDt() const;
     [[nodiscard]] bool consumeResetRequest();
     [[nodiscard]] CheckpointObject* forcedCheckpoint(PlayLayer* layer) const;
@@ -65,6 +65,7 @@ public:
     [[nodiscard]] bool isInjecting() const { return m_injecting; }
     [[nodiscard]] bool suppressUserInput() const { return m_mode == BotMode::Playback || m_mode == BotMode::Analyzing; }
     [[nodiscard]] bool isAnalyzing() const { return m_mode == BotMode::Analyzing; }
+    [[nodiscard]] bool waitingForBranchReset() const { return m_pendingReset; }
     [[nodiscard]] BotMode mode() const { return m_mode; }
     [[nodiscard]] std::uint32_t currentFrame() const { return m_currentFrame; }
     [[nodiscard]] Macro const& lastMacro() const { return m_lastMacro; }
@@ -72,6 +73,7 @@ public:
     [[nodiscard]] bool frameStepperEnabled() const { return m_frameStepper; }
     [[nodiscard]] int pendingSteps() const { return m_stepRequests; }
     [[nodiscard]] bool trajectoryVisible() const { return m_trajectoryVisible; }
+    [[nodiscard]] bool trajectoryDrawing() const { return m_trajectory.drawing(); }
     [[nodiscard]] bool hasPracticeAnchor() const { return m_anchor.checkpoint() != nullptr; }
     [[nodiscard]] bool speedhackEnabled() const { return m_speedhack.enabled(); }
     [[nodiscard]] bool speedhackAudio() const { return m_speedhack.audioFollow(); }
@@ -100,13 +102,12 @@ private:
     std::uint32_t m_currentFrame = 0;
     std::size_t m_playbackCursor = 0;
     std::size_t m_sequence = 0;
-    double m_accumulator = 0.0;
     bool m_injecting = false;
     bool m_pendingReset = false;
     bool m_branchResolved = false;
     bool m_frameStepper = false;
     int m_stepRequests = 0;
-    bool m_trajectoryVisible = true;
+    bool m_trajectoryVisible = false;
     bool m_forceAnchorLoad = false;
 };
 

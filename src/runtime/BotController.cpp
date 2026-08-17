@@ -5,12 +5,15 @@
 #include <Geode/loader/Mod.hpp>
 
 #include <algorithm>
-#include <cmath>
 #include <sstream>
 
 using namespace geode::prelude;
 
 namespace fwa {
+
+namespace {
+constexpr float kPhysicsDt = 1.0f / 240.0f;
+}
 
 BotController& BotController::get() {
     static BotController controller;
@@ -29,15 +32,22 @@ bool BotController::settingBool(char const* key, bool fallback) const {
 
 void BotController::initialize() {
     FileLogger::get().initialize();
-    m_trajectoryVisible = settingBool("show-trajectory", true);
-    m_trajectory.setVisible(m_trajectoryVisible);
+    // Trajectory is runtime-only and always starts OFF. Older builds persisted
+    // this option, which could make stale prediction lines appear immediately
+    // after updating. The user explicitly enables it with Ctrl+F5 or the menu.
+    m_trajectoryVisible = false;
+    m_trajectory.setVisible(false);
     m_speedhack.setAudioFollow(settingBool("speedhack-audio", true));
-    FileLogger::get().debug("[FWBot] initialized v0.2 architecture");
+    syncAudio();
+    FileLogger::get().debug("[FWBot] initialized v0.2.2 scheduler architecture");
 }
 
 void BotController::fillLevelMetadata(PlayLayer* layer, Macro& macro) {
-    macro.gameFps = settingInt("analysis-tps", 240);
-    macro.windowFps = macro.gameFps;
+    // GD 2.2081 frame-window analysis in FWBot is deliberately locked to the
+    // native 240 Hz physics base. Exposing arbitrary TPS without the complete
+    // Silicate TPS bypass would make N_i misleading.
+    macro.gameFps = 240;
+    macro.windowFps = 240;
     macro.levelName = "Current Level";
     macro.levelId = 0;
     (void)layer;
@@ -55,11 +65,13 @@ void BotController::requestAnchorRestore(PlayLayer* layer) {
         FileLogger::get().debug("[Practice] restore requested without a valid anchor");
         return;
     }
+
     m_forceAnchorLoad = true;
     m_currentFrame = 0;
     m_playbackCursor = 0;
-    m_accumulator = 0.0;
     m_branchResolved = false;
+    m_pendingReset = false;
+    m_trajectory.reset(layer);
     layer->m_extraDelta = 0.0f;
     layer->resetLevel();
 }
@@ -70,32 +82,36 @@ void BotController::toggleRecording(PlayLayer* layer) {
 }
 
 void BotController::startRecording(PlayLayer* layer) {
-    if (!layer) return;
+    if (!layer || layer->m_isPaused) return;
+
+    // A stale stepper state was the main reason v0.2.1 could appear frozen when
+    // Record was pressed. Recording always starts realtime; the user can turn
+    // the stepper back on afterwards and continue recording frame-by-frame.
+    setFrameStepper(false);
     cancelAutomation();
 
     m_recordingMacro = {};
     fillLevelMetadata(layer, m_recordingMacro);
     if (!captureAnchor(layer, m_recordingMacro)) return;
 
-    // Recording begins exactly where the player currently is. In practice mode this
-    // means: place a checkpoint before the timing, position yourself, then press Record.
     m_mode = BotMode::Recording;
     m_currentFrame = 0;
     m_playbackCursor = 0;
     m_sequence = 0;
-    m_accumulator = 0.0;
     m_pendingReset = false;
     m_branchResolved = false;
     layer->m_extraDelta = 0.0f;
     m_trajectory.reset(layer);
-    FileLogger::get().debug("[Record] started from current Practice/gameplay state; frame 0 is FWBot anchor");
+    syncAudio();
+    FileLogger::get().debug("[Record] started from current Practice/gameplay state; scheduler remains live");
 }
 
 void BotController::stopRecording(PlayLayer* layer, bool allowAutoAnalyze) {
     if (m_mode != BotMode::Recording) return;
+
     m_lastMacro = m_recordingMacro;
     m_mode = BotMode::Idle;
-    m_accumulator = 0.0;
+    m_stepRequests = 0;
 
     std::ostringstream msg;
     msg << "[Record] stop; inputs=" << m_lastMacro.inputs.size()
@@ -113,11 +129,13 @@ void BotController::startPlayback(PlayLayer* layer) {
     if (m_mode == BotMode::Recording) stopRecording(layer, false);
     if (m_lastMacro.inputs.empty() || !m_anchor.validFor(layer)) return;
 
+    setFrameStepper(false);
     cancelAutomation();
     m_mode = BotMode::Playback;
     m_currentFrame = 0;
     m_playbackCursor = 0;
-    m_accumulator = 0.0;
+    m_branchResolved = false;
+    m_trajectory.reset(layer);
     FileLogger::get().debug("[Playback] restoring Practice anchor");
     requestAnchorRestore(layer);
 }
@@ -126,6 +144,8 @@ void BotController::startAnalysis(PlayLayer* layer) {
     if (!layer) return;
     if (m_mode == BotMode::Recording) stopRecording(layer, false);
     if (m_lastMacro.inputs.empty() || !m_anchor.validFor(layer)) return;
+
+    setFrameStepper(false);
     cancelAutomation();
 
     int radius = settingInt("scan-radius", 12);
@@ -135,8 +155,9 @@ void BotController::startAnalysis(PlayLayer* layer) {
     m_mode = BotMode::Analyzing;
     m_currentFrame = 0;
     m_playbackCursor = 0;
-    m_accumulator = 0.0;
     m_branchResolved = false;
+    m_trajectory.reset(layer);
+    syncAudio();
 
     if (!m_analysis.prepareNextSimulation()) {
         finishAnalysis();
@@ -158,8 +179,8 @@ void BotController::cancelAutomation() {
     m_pendingReset = false;
     m_forceAnchorLoad = false;
     m_playbackCursor = 0;
-    m_accumulator = 0.0;
     m_branchResolved = false;
+    syncAudio();
 }
 
 void BotController::toggleFrameStepper() {
@@ -167,17 +188,34 @@ void BotController::toggleFrameStepper() {
 }
 
 void BotController::setFrameStepper(bool enabled) {
+    // Never carry a frozen scheduler state from menus into a newly opened level.
+    if (enabled) {
+        auto* play = PlayLayer::get();
+        if (!play || play->m_isPaused) {
+            m_frameStepper = false;
+            m_stepRequests = 0;
+            return;
+        }
+    }
+
+    // Playback/analyze own the scheduler. Starting manual stepping cancels them;
+    // Recording is intentionally allowed so a macro can be captured one tick at a time.
+    if (enabled && (m_mode == BotMode::Playback || m_mode == BotMode::Analyzing)) {
+        cancelAutomation();
+    }
+
     m_frameStepper = enabled;
     m_stepRequests = 0;
-    m_accumulator = 0.0;
     if (auto* play = PlayLayer::get()) play->m_extraDelta = 0.0f;
     FileLogger::get().debug(std::string("[Stepper] enabled=") + (enabled ? "true" : "false"));
 }
 
 void BotController::requestFrameStep() {
+    auto* play = PlayLayer::get();
+    if (!play || play->m_isPaused) return;
     if (!m_frameStepper) setFrameStepper(true);
-    m_stepRequests = std::min(m_stepRequests + 1, 64);
-    FileLogger::get().debug("[Stepper] queued exactly one physics tick");
+    m_stepRequests = std::min(m_stepRequests + 1, 8);
+    FileLogger::get().debug("[Stepper] queued one scheduler/physics tick");
 }
 
 bool BotController::consumeFrameStep() {
@@ -189,17 +227,19 @@ bool BotController::consumeFrameStep() {
 void BotController::toggleTrajectory() {
     m_trajectoryVisible = !m_trajectoryVisible;
     m_trajectory.setVisible(m_trajectoryVisible);
+    if (auto* play = PlayLayer::get()) m_trajectory.reset(play);
     FileLogger::get().debug(std::string("[Trajectory] visible=") + (m_trajectoryVisible ? "true" : "false"));
 }
 
 void BotController::setSpeedhackEnabled(bool enabled) {
     m_speedhack.setEnabled(enabled);
-    m_accumulator = 0.0;
+    syncAudio();
     FileLogger::get().debug(std::string("[Speedhack] enabled=") + (enabled ? "true" : "false"));
 }
 
 void BotController::setSpeedhackSpeed(float speed) {
     m_speedhack.setSpeed(speed);
+    syncAudio();
     std::ostringstream out;
     out << "[Speedhack] speed=" << m_speedhack.speed();
     FileLogger::get().debug(out.str());
@@ -207,7 +247,14 @@ void BotController::setSpeedhackSpeed(float speed) {
 
 void BotController::setSpeedhackAudio(bool enabled) {
     m_speedhack.setAudioFollow(enabled);
+    syncAudio();
     FileLogger::get().debug(std::string("[Speedhack] audioFollow=") + (enabled ? "true" : "false"));
+}
+
+void BotController::syncAudio() {
+    // Analysis may run many times faster than realtime; don't turn that into a
+    // chipmunk soundtrack. Manual speedhack audio remains immediate and persistent.
+    m_speedhack.syncAudio(m_mode != BotMode::Analyzing);
 }
 
 void BotController::recordInput(bool pressed, int button, bool player1) {
@@ -247,13 +294,20 @@ void BotController::beforePhysicsStep(PlayLayer* layer) {
 
 void BotController::afterPhysicsStep(PlayLayer* layer) {
     if (!layer) return;
-    if (m_mode == BotMode::Analyzing && m_branchResolved && m_pendingReset) return;
+    if (m_pendingReset) return;
 
     ++m_currentFrame;
-    m_trajectory.update(layer, fixedDt(), m_currentFrame);
+
+    // Predictive trajectory is intentionally kept out of high-speed automated
+    // runs. It is a manual visual aid, never an analyzer verdict source.
+    if (m_trajectoryVisible && (m_mode == BotMode::Idle || m_mode == BotMode::Recording)) {
+        m_trajectory.update(layer, fixedDt(), m_currentFrame);
+    }
 
     if (m_mode == BotMode::Playback) {
-        auto endFrame = m_lastMacro.lastFrame() + static_cast<std::uint32_t>(settingInt("post-macro-validation", 120));
+        auto post = static_cast<std::uint64_t>(std::max(0, settingInt("post-macro-validation", 120)));
+        auto end64 = static_cast<std::uint64_t>(m_lastMacro.lastFrame()) + 1u + post;
+        auto endFrame = static_cast<std::uint32_t>(std::min<std::uint64_t>(end64, UINT32_MAX));
         if (m_currentFrame >= endFrame) {
             FileLogger::get().debug("[Playback] finished validation horizon");
             m_mode = BotMode::Idle;
@@ -267,6 +321,16 @@ void BotController::afterPhysicsStep(PlayLayer* layer) {
     }
 }
 
+void BotController::onVisualFrame(PlayLayer* layer) {
+    syncAudio();
+    if (!layer) return;
+    if (!m_trajectoryVisible) return;
+    if (m_mode == BotMode::Playback || m_mode == BotMode::Analyzing) return;
+
+    // If the game is visually refreshing without a physics tick (e.g. stepper
+    // frozen), update() is de-duplicated by the trajectory's frame cache.
+    m_trajectory.update(layer, fixedDt(), m_currentFrame);
+}
 
 void BotController::beforeReset(PlayLayer* layer) {
     if (!layer || !m_anchor.validFor(layer)) return;
@@ -278,13 +342,12 @@ void BotController::beforeReset(PlayLayer* layer) {
 void BotController::onReset(PlayLayer* layer) {
     m_currentFrame = 0;
     m_playbackCursor = 0;
-    m_accumulator = 0.0;
     m_branchResolved = false;
     if (layer) layer->m_extraDelta = 0.0f;
     m_trajectory.reset(layer);
+    syncAudio();
 
     if (m_mode == BotMode::Recording) {
-        // A failed practice attempt starts a fresh recording from the same anchor.
         m_recordingMacro.inputs.clear();
         m_sequence = 0;
         FileLogger::get().debug("[Record] attempt reset -> partial inputs discarded; recording continues from anchor");
@@ -296,7 +359,6 @@ CheckpointObject* BotController::forcedCheckpoint(PlayLayer* layer) const {
     return m_anchor.checkpoint();
 }
 
-
 void BotController::restartCurrentBranch(PlayLayer* layer) {
     requestAnchorRestore(layer);
 }
@@ -306,6 +368,8 @@ void BotController::onForcedCheckpointLoaded(PlayLayer* layer) {
     m_forceAnchorLoad = false;
     m_anchor.applySupplemental(layer);
     if (layer) layer->m_extraDelta = 0.0f;
+    m_trajectory.reset(layer);
+    syncAudio();
     FileLogger::get().debug("[Practice] FWBot anchor loaded");
 }
 
@@ -332,6 +396,7 @@ void BotController::onPlayLayerExit(PlayLayer* layer) {
     m_speedhack.resetAudio();
     m_anchor.clear();
     m_trajectory.reset(nullptr);
+    m_currentFrame = 0;
     FileLogger::get().debug("[FWBot] PlayLayer exit: runtime state cleared");
 }
 
@@ -365,41 +430,30 @@ void BotController::advanceAnalysis(std::string const& reason, bool passed) {
 void BotController::finishAnalysis() {
     if (!m_analysis.finished()) {
         m_mode = BotMode::Idle;
+        syncAudio();
         return;
     }
 
     auto path = FileLogger::get().exportAnalysis(m_analysis.sourceMacro(), m_analysis.results());
     FileLogger::get().debug(std::string("[Analyzer] finished report=") + path.string());
     m_mode = BotMode::Idle;
-    m_pendingReset = false;
+    // Return to the exact state from which the macro was recorded instead of
+    // leaving the player in the final simulated branch. The scheduler hook
+    // consumes this restore request immediately after the current fixed tick.
+    m_pendingReset = m_anchor.validFor(PlayLayer::get());
     m_branchResolved = false;
-    m_accumulator = 0.0;
+    syncAudio();
 }
 
-bool BotController::shouldInterceptUpdate() const {
-    return m_frameStepper || m_mode != BotMode::Idle || m_speedhack.enabled();
-}
-
-bool BotController::fixedDeltaActive() const {
-    return m_frameStepper || m_mode != BotMode::Idle;
-}
-
-int BotController::automatedStepsForUpdate(float realDt) {
-    if (m_frameStepper || m_mode == BotMode::Idle) return 0;
-
-    double speed = (m_mode == BotMode::Analyzing)
-        ? static_cast<double>(settingInt("analysis-speed", 8))
-        : static_cast<double>(m_speedhack.effectiveSpeed());
-    auto dt = static_cast<double>(fixedDt());
-    m_accumulator += std::clamp(static_cast<double>(realDt), 0.0, 0.25) * speed;
-    int steps = static_cast<int>(std::floor(m_accumulator / dt));
-    steps = std::clamp(steps, 0, 256);
-    m_accumulator -= static_cast<double>(steps) * dt;
-    return steps;
+float BotController::schedulerSpeed() const {
+    if (m_mode == BotMode::Analyzing) {
+        return static_cast<float>(std::clamp(settingInt("analysis-speed", 8), 1, 16));
+    }
+    return gameplaySpeed();
 }
 
 float BotController::fixedDt() const {
-    return 1.0f / static_cast<float>(std::max(1, settingInt("analysis-tps", 240)));
+    return kPhysicsDt;
 }
 
 bool BotController::consumeResetRequest() {

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 
 namespace fwa {
 
@@ -21,11 +22,14 @@ private:
     void applyStyle();
     void drawWindow();
     void drawLogo();
+    void clampWindowToSafeArea();
 
     bool m_visible = false;
     bool m_initialized = false;
+    bool m_firstWindowPlacement = true;
     void* m_hwnd = nullptr;
     void* m_oldWndProc = nullptr;
+    std::string m_iniPath;
 };
 
 } // namespace fwa

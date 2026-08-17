@@ -1,28 +1,44 @@
-# Debug log guide
+# FWBot v0.2.2 debug guide
 
-`logs/debug/latest.log` is replaced every time the mod loads.
+`logs/debug/latest.log` is replaced when FWBot initializes.
 
 Useful records:
 
-- `[Record] frame=...` — exact captured input.
-- `[Playback] ...` — replay lifecycle.
-- `[Analyzer] next input#... offset=...` — branch that is about to run.
-- `[Branch] ... result=PASS/FAIL reason=...` — result used by the Frame Window summarizer.
-- `death at frame X causePtr=...` — candidate death frame and raw cause object pointer.
-- `[Stepper] ...` — pause/frame-step state.
+- `[Record] started ... scheduler remains live` — Record should not freeze gameplay.
+- `[Record] frame=...` — captured HOLD/RELEASE frame.
+- `[Stepper] enabled=...` — stepper lifecycle.
+- `[Stepper] queued one scheduler/physics tick` — F5 request.
+- `[Speedhack] speed=...` / `audioFollow=...` — manual speed state.
+- `[Practice] FWBot anchor loaded` — restore completed.
+- `[Analyzer] next input#... offset=...` — next candidate branch.
+- `[Branch] ... PASS/FAIL ...` — verdict used in Frame Window calculation.
 
-A clean analysis report is never mixed with these messages.
+## If gameplay freezes
 
-## Common diagnosis
+1. Press F4 once to disable Frame Stepper.
+2. Open FWBot > Debug and press **Disable stepper** / **Cancel playback / analysis**.
+3. Send `logs/debug/latest.log` if gameplay still does not resume.
+
+In v0.2.2 Record itself disables stale stepper state before capturing the Practice anchor.
+
+## If trajectory lines remain
+
+Trajectory starts OFF every launch. Ctrl+F5 toggles it. v0.2.2 removes old draw/fake nodes from the PlayLayer on reset/toggle/exit instead of only forgetting their pointers. If any line survives after disabling trajectory, send a screenshot plus `latest.log` and note whether it happened after death, checkpoint reset, Playback or Analyze.
+
+## If speedhack audio is wrong
+
+Toggle F3 or change the speed slider while staying in the same attempt. Pitch should update immediately; it is re-applied every visual frame and after reset. Automatic Analyze intentionally returns audio to normal pitch while branches are processed.
+
+## Analyzer diagnosis
 
 ### Baseline FAIL
-The original recorded timing itself could not survive the replay validation horizon. Do not trust that input's window (`N_i=0`). Check for replay desync, unrecorded state, checkpoints, random triggers, or insufficient state capture.
+The original recorded timing did not survive replay from the saved Practice anchor. Treat `N_i=0` as a desync signal rather than a valid difficulty result. Send the debug log.
 
-### Window touches scan boundary
-Increase **Frame Scan Radius**. The result is clipped and may be larger than reported.
+### Window touches scan radius
+Increase **Frame Scan Radius**. A boundary-touching result may be clipped.
 
-### Fast scan misses an unusual PASS island
-Enable **Exhaustive Scan**. Fast scan stops each direction after the first FAIL because normal frame windows are expected to be contiguous around the successful recorded timing.
+### Unusual PASS island
+Enable **Exhaustive Scan**. Normal Fast Scan stops each side at the first FAIL.
 
-### Input has delayed consequences
-Increase **Post-macro Validation Frames** or record the macro farther beyond the timing.
+### Delayed death
+Increase **Post-macro Validation Frames** or record farther past the timing.

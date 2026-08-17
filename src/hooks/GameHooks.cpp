@@ -1,6 +1,7 @@
 #include "runtime/BotController.hpp"
 
 #include <Geode/Geode.hpp>
+#include <Geode/modify/CCScheduler.hpp>
 #include <Geode/modify/GJBaseGameLayer.hpp>
 #include <Geode/modify/PlayLayer.hpp>
 
@@ -10,65 +11,102 @@ using namespace geode::prelude;
 
 namespace fwa {
 
+// Time control belongs at the scheduler level. This mirrors the stable part of
+// Silicate's architecture and avoids manually calling GJBaseGameLayer::update.
+class $modify(FWBotSchedulerHook, CCScheduler) {
+    void update(float dt) override {
+        auto& bot = BotController::get();
+        auto* play = PlayLayer::get();
+
+        if (!play || play->m_isPaused) {
+            bot.syncAudio();
+            CCScheduler::update(dt);
+            return;
+        }
+
+        if (bot.frameStepperEnabled()) {
+            if (!bot.consumeFrameStep()) {
+                // Do not call the scheduler at all. The render loop still swaps
+                // buffers, so ImGui remains responsive while gameplay is frozen.
+                bot.syncAudio();
+                bot.onVisualFrame(play);
+                return;
+            }
+
+            play->m_extraDelta = 0.0f;
+            CCScheduler::update(bot.fixedDt());
+        } else if (bot.isAnalyzing()) {
+            // Analysis uses exact 240 Hz scheduler ticks rather than one giant
+            // variable dt. The setting is ticks per visual frame, not physics TPS.
+            int ticks = std::clamp(static_cast<int>(bot.schedulerSpeed()), 1, 16);
+            for (int i = 0; i < ticks && bot.isAnalyzing(); ++i) {
+                CCScheduler::update(bot.fixedDt());
+
+                if (bot.consumeResetRequest()) {
+                    bot.restartCurrentBranch(play);
+                    play = PlayLayer::get();
+                    if (!play) break;
+                }
+            }
+        } else {
+            float speed = std::clamp(bot.schedulerSpeed(), 0.05f, 10.0f);
+            CCScheduler::update(dt * speed);
+        }
+
+        bot.onVisualFrame(play);
+
+        // Final analysis completion also requests one restore so the user never
+        // gets left inside the last simulated candidate branch.
+        if (bot.consumeResetRequest() && play) {
+            bot.restartCurrentBranch(play);
+        }
+    }
+};
+
 class $modify(FWBotGameLayerHook, GJBaseGameLayer) {
     void handleButton(bool pressed, int button, bool player1) {
         auto& bot = BotController::get();
         if (!bot.isInjecting() && bot.suppressUserInput()) return;
 
-        GJBaseGameLayer::handleButton(pressed, button, player1);
+        // Record at the same relative physics-frame counter that playback uses.
         if (!bot.isInjecting()) bot.recordInput(pressed, button, player1);
+        GJBaseGameLayer::handleButton(pressed, button, player1);
     }
 
-    void update(float dt) override {
+    void processCommands(float dt, bool isHalfTick, bool isLastTick) {
         auto& bot = BotController::get();
         auto* play = PlayLayer::get();
         bool currentPlayLayer = play &&
             static_cast<GJBaseGameLayer*>(play) == static_cast<GJBaseGameLayer*>(this);
 
-        if (!currentPlayLayer || !bot.shouldInterceptUpdate()) {
-            GJBaseGameLayer::update(dt);
+        if (!currentPlayLayer) {
+            GJBaseGameLayer::processCommands(dt, isHalfTick, isLastTick);
             return;
         }
 
-        // Silicate-style frame stepping: no PauseLayer. When enabled, gameplay physics
-        // simply does not receive an update until a step request is consumed.
-        if (bot.frameStepperEnabled()) {
-            if (!bot.consumeFrameStep()) return;
-            play->m_extraDelta = 0.0f;
-            bot.beforePhysicsStep(play);
-            GJBaseGameLayer::update(bot.fixedDt());
-            bot.afterPhysicsStep(play);
-            if (bot.consumeResetRequest()) bot.restartCurrentBranch(play);
-            return;
-        }
+        // A branch can resolve in the middle of one accelerated scheduler update.
+        // Do not let the newly prepared candidate run on the old branch world
+        // before the scheduler returns and restores the Practice anchor.
+        if (bot.waitingForBranchReset()) return;
 
-        // Recording/playback/analyze use deterministic fixed physics ticks.
-        if (bot.mode() != BotMode::Idle) {
-            int steps = bot.automatedStepsForUpdate(dt);
-            for (int i = 0; i < steps; ++i) {
-                bot.beforePhysicsStep(play);
-                GJBaseGameLayer::update(bot.fixedDt());
-                bot.afterPhysicsStep(play);
-                if (bot.consumeResetRequest()) {
-                    bot.restartCurrentBranch(play);
-                    break;
-                }
-            }
-            return;
-        }
-
-        // Manual FWBot speedhack intentionally affects normal gameplay dt. Analysis
-        // never uses this path; it always uses the fixed-tick branch above.
-        GJBaseGameLayer::update(dt * bot.gameplaySpeed());
+        // processCommands is inside GD's physics loop. At high speed the game can
+        // perform many of these in one rendered frame; every one still gets exact
+        // replay injection / frame accounting.
+        bot.beforePhysicsStep(play);
+        GJBaseGameLayer::processCommands(dt, isHalfTick, isLastTick);
+        bot.afterPhysicsStep(play);
     }
 
-    double getModifiedDelta(float dt) {
-        auto& bot = BotController::get();
-        if (!PlayLayer::get() || !bot.fixedDeltaActive()) {
-            return GJBaseGameLayer::getModifiedDelta(dt);
-        }
-        float timeWarp = std::min(this->m_gameState.m_timeWarp, 1.0f);
-        return static_cast<double>(bot.fixedDt() * timeWarp);
+    void destroyObject(GameObject* object) {
+        // Prediction may touch simulated objects. Never let a visual fake-player
+        // trajectory permanently destroy real level objects.
+        if (BotController::get().trajectoryDrawing()) return;
+        GJBaseGameLayer::destroyObject(object);
+    }
+
+    void gameEventTriggered(GJGameEvent event, int p1, int p2) {
+        if (BotController::get().trajectoryDrawing()) return;
+        GJBaseGameLayer::gameEventTriggered(event, p1, p2);
     }
 };
 
@@ -92,6 +130,12 @@ class $modify(FWBotPlayLayerHook, PlayLayer) {
 
     void destroyPlayer(PlayerObject* player, GameObject* cause) {
         auto& bot = BotController::get();
+
+        // Fake trajectory players must never kill/reset the real attempt.
+        if (bot.trajectoryDrawing() && player != m_player1 && player != m_player2) {
+            return;
+        }
+
         if (bot.isAnalyzing()) {
             bot.onDeath(bot.currentFrame(), cause);
             return;

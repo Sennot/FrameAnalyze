@@ -7,7 +7,10 @@ public:
     void setEnabled(bool value);
     void setSpeed(float value);
     void setAudioFollow(bool value);
-    void applyAudio() const;
+
+    // Re-applies pitch to the current FMOD master group. Calling this from the
+    // scheduler makes audio changes immediate and resilient to attempt restarts.
+    void syncAudio(bool allowFollow = true) const;
     void resetAudio() const;
 
     [[nodiscard]] bool enabled() const { return m_enabled; }

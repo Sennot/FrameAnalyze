@@ -1,20 +1,14 @@
 {
   "geode": "5.8.2",
-  "gd": { "win": "2.2081" },
+  "gd": {
+    "win": "2.2081"
+  },
   "id": "framewindow.analyzer",
   "name": "FWBot",
-  "version": "v0.2.1",
+  "version": "v0.2.2",
   "developer": "FWBot Contributors",
-  "description": "Practice-based macro bot and automatic HOLD/RELEASE frame-window analyzer for NaNDL calculations.",
+  "description": "Stable practice-based macro bot with scheduler-level frame stepping, speedhack, predictive trajectory and automatic HOLD/RELEASE frame-window analysis for NaNDL.",
   "settings": {
-    "analysis-tps": {
-      "type": "int",
-      "name": "Physics / Analysis TPS",
-      "description": "Fixed physics tick rate used by recording, playback, frame stepping and branch analysis.",
-      "default": 240,
-      "min": 30,
-      "max": 1000
-    },
     "scan-radius": {
       "type": "int",
       "name": "Frame Scan Radius",
@@ -33,11 +27,11 @@
     },
     "analysis-speed": {
       "type": "int",
-      "name": "Analysis Speed",
-      "description": "How many fixed-tick branches FWBot tries to process faster than realtime during automatic analysis.",
+      "name": "Analysis Ticks per Visual Frame",
+      "description": "Number of exact 1/240 scheduler ticks processed per rendered frame during automatic analysis.",
       "default": 8,
       "min": 1,
-      "max": 64
+      "max": 16
     },
     "exhaustive-scan": {
       "type": "bool",
@@ -50,18 +44,13 @@
       "name": "Analyze after recording",
       "default": true
     },
-    "show-trajectory": {
-      "type": "bool",
-      "name": "Show trajectory",
-      "default": true
-    },
     "trajectory-length": {
       "type": "int",
       "name": "Trajectory Length",
       "description": "Prediction ticks drawn for hold/release fake-player branches.",
-      "default": 90,
+      "default": 30,
       "min": 15,
-      "max": 360
+      "max": 180
     },
     "speedhack-audio": {
       "type": "bool",

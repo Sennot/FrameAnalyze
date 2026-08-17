@@ -1,33 +1,43 @@
-FWBot v0.2.1 test results
+FWBot v0.2.2 test results
 =========================
 
-Portable analyzer core
-- Standard: C++23
-- Strict flags: -Wall -Wextra -Wpedantic -Werror
-- Result: 100% tests passed, 0 failed
+Portable Frame Window core
+- Language: C++23
+- Standard build: PASS
+- Strict build: PASS with -Wall -Wextra -Wpedantic -Werror
+- ctest: 100% passed, 0 failed
 
-Regression coverage includes:
-- frame-perfect HOLD/RELEASE windows
-- multi-frame contiguous windows
-- 4-frame wave example where recorded click is the second valid frame (Early=1, Late=2, N_i=4)
-- disjoint passing segments
+Regression coverage
+- contiguous multi-frame windows
+- 4-frame wave window recorded on the second valid frame -> Early=1 / Late=2 / N_i=4
+- 1-frame HOLD/RELEASE frame perfect
+- disjoint PASS segments
 - scan-radius clipping
 - baseline failure
 - NaNDL JSON/CSV export
-- fast-scan stop-after-FAIL behavior
-- rejection of shifted HOLD/RELEASE candidates that create invalid input ordering
+- fast scan stop-after-FAIL
+- invalid shifted HOLD/RELEASE ordering
+- analysis horizon off-by-one: input at frame N cannot PASS until after frame N executes
 
-Source/API contract checks
-- Required Geode modify headers are asserted for GJBaseGameLayer, PlayLayer, and CCEGLView.
-- PracticeAnchor never passes its const saved EffectManagerState directly to loadFromState(EffectManagerState&); a working copy is used.
-- Keybind listener remains const-invocable and bool-returning.
-- mod.json targets Geode 5.8.2 / GD 2.2081 and version v0.2.1.
+v0.2.2 source/API contracts
+- CCScheduler modifier header present and scheduler-level timing hook enabled
+- no manual GJBaseGameLayer::update(bot.fixedDt()) driver
+- replay/analyzer clock hooked to GJBaseGameLayer::processCommands(float,bool,bool)
+- pending analyzer branch is blocked until Practice restore
+- final analysis requests Practice-anchor restore
+- trajectory cleanup uses removeFromParentAndCleanup(true)
+- trajectory starts runtime OFF and old persisted show-trajectory setting is removed
+- trajectory collision simulation restores GJGameState/EffectManagerState
+- speedhack FMOD master pitch is actively re-synchronized
+- ImGui has safe-area clamp, persistent fwbot_imgui.ini, tabbed layout and F3-F8 hotkey passthrough
+- Frame Stepper cannot be armed outside a live unpaused PlayLayer
+- Geode EventV3 keybind listener remains const-invocable / bool-returning
+- Practice EffectManagerState restore uses a non-const working copy
 
-Config checks
-- mod.json parses as JSON.
-- .github/workflows/build.yml parses as YAML.
-- CMake portable-core configure/build/test succeeds.
+Configuration
+- mod.json JSON: PASS
+- build.yml YAML: PASS
+- target: Geode 5.8.2 / Geometry Dash 2.2081 / Win64
 
-Runtime/Win64 note
-- The user's v0.2.0 Actions build reached 41/47 before exposing only the PracticeAnchor const-reference and CCEGLView modifier-header compile errors fixed in v0.2.1.
-- The next GitHub Actions run remains the authoritative Win64 Geode compile/link/package check.
+Important limitation
+- This sandbox cannot perform the final Windows Geometry Dash/Geode link/run test. The included GitHub Actions Win64 job remains the authoritative full .geode build check.

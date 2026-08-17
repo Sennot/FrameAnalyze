@@ -111,7 +111,7 @@ int main() {
         session.start(macro, 2, 5, false);
         assert(session.prepareNextSimulation());
         assert(session.currentJob().offset == 0);
-        assert(session.passFrame() == 15);
+        assert(session.passFrame() == 16);
         session.finishCurrent(true, "baseline");
 
         assert(session.prepareNextSimulation());
@@ -135,6 +135,17 @@ int main() {
         assert(session.results()[0].frameWindow == 2);
     }
 
+
+    {
+        // Off-by-one regression: a last input on frame 10 must actually be
+        // processed before a post=0 branch can PASS. afterPhysics reaches 11.
+        Macro macro;
+        macro.inputs.push_back(inputAt(10));
+        AnalysisSession session;
+        session.start(macro, 1, 0, false);
+        assert(session.prepareNextSimulation());
+        assert(session.passFrame() == 11);
+    }
 
     {
         // A HOLD shifted past its paired RELEASE is not a meaningful timing branch.

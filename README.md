@@ -1,63 +1,89 @@
-# FWBot v0.2.1
+# FWBot v0.2.2
 
-FWBot is a Windows Geode bot for Geometry Dash 2.2081 / Geode 5.8.2 focused on deterministic practice recording and automatic HOLD/RELEASE frame-window analysis.
+FWBot is a Windows Geode bot for Geometry Dash 2.2081 / Geode 5.8.2 focused on Practice recording, deterministic playback and automatic HOLD/RELEASE Frame Window analysis for NaNDL.
 
-## Core workflow
+## Recommended workflow
 
-1. Enter Practice Mode and place a checkpoint just before the section you want to analyze.
+1. Enter Practice Mode and place a checkpoint immediately before the timing/section.
 2. Open FWBot with **F8**.
-3. Press **F6** (or Record in the ImGui panel). Frame 0 becomes the current gameplay/practice state; FWBot does not restart the level.
-4. Play the section. You can enable FWBot Frame Stepper with **F4**, then use **F5** for one physics tick at a time.
-5. Press **F6** again to stop. With Auto Analyze enabled, FWBot restores the saved anchor and tests every HOLD/RELEASE at earlier/later frames.
-6. Reports are written to the mod save directory under `logs/` as `.log`, `_nandl.csv`, `_nandl.json`. Detailed diagnostics are in `logs/debug/latest.log`.
+3. Press **F6** / Record. The current Practice state becomes macro frame 0. Record no longer freezes or owns the gameplay update loop.
+4. Play normally, or enable **F4 Frame Stepper** and use **F5** for one scheduler/physics step at a time.
+5. Press **F6** again. If Auto Analyze is enabled, FWBot restores the same anchor and tests each recorded HOLD/RELEASE earlier and later.
+6. Read `logs/*.log`, `*_nandl.csv`, `*_nandl.json`; detailed runtime diagnostics are in `logs/debug/latest.log`.
 
 ## Binds
 
-- F3 — FWBot speedhack toggle
-- F4 — Frame Stepper toggle (physics freeze; **not** Geometry Dash PauseLayer)
-- F5 — Next physics frame
-- F6 — Start/stop recording from current practice state
-- F7 — Playback last macro from its practice anchor
+- F3 — FWBot speedhack
+- F4 — Frame Stepper toggle (no Geometry Dash PauseLayer)
+- F5 — next physics step
+- F6 — Record / Stop
+- F7 — Playback
 - F8 — FWBot ImGui menu
-- Ctrl+F5 — trajectory
-- Ctrl+F7 — analyze last macro
+- Ctrl+F5 — predictive trajectory
+- Ctrl+F7 — Analyze Last
 
 All binds are editable in Geode settings.
 
-## Frame Window / NaNDL
+## v0.2.2 stability architecture
 
-For each input FWBot treats the recorded successful frame as offset 0, then tests frames to the left and right using real gameplay branches. Example: if a wave timing is passable on offsets `-1, 0, +1, +2`, the result is `Early=1`, `Late=2`, `N_i=4` even if the recorded click was the second valid frame.
+### Scheduler-level Frame Stepper
 
-`FRAME WINDOW (N_i)` is exported for NaNDL together with frame/time data. Exhaustive Scan can reveal disjoint passing segments; the NaNDL value remains the contiguous passing island containing the recorded timing.
+FWBot no longer manually loops `GJBaseGameLayer::update`. Time control is hooked at `CCScheduler::update`:
 
-## Practice anchor
+- stepper OFF: scheduler receives normal `dt * speed`;
+- stepper ON with no request: scheduler gameplay update is skipped while rendering/ImGui remains alive;
+- F5: one request is consumed and scheduler receives one `1/240` step;
+- enabling/disabling stepper clears queued steps and `m_extraDelta`, preventing the old catch-up/frozen-state behavior.
 
-The v0.2 runtime captures a retained `CheckpointObject` plus input-state metadata at Record start. Playback and analysis force-load that anchor rather than resetting to frame 0 of the level. This is the same high-level model used by Silicate's practice/checkpoint system, while FWBot keeps a smaller state surface.
+Recording can run in realtime or while the stepper is enabled. Starting Record clears a stale stepper state first, so pressing Record itself never intentionally freezes the player.
 
-## Frame Stepper
+### Physics-frame replay clock
 
-The stepper intercepts gameplay update directly. When enabled with no queued step, game physics receives no update; UI/rendering remain alive. `Next frame` consumes one request, clears extra delta, and advances exactly one FWBot fixed physics tick. Disabling the stepper clears queued/overflow state so the game does not catch up in a burst.
+Macro injection and frame accounting live in `GJBaseGameLayer::processCommands`, inside the gameplay physics loop. This means playback and analysis continue to count actual physics steps even when one rendered frame contains several game updates at speed.
 
-## Speedhack + audio
+### Practice anchor
 
-FWBot includes a manual speedhack. If `Audio follows speed` is enabled, the FMOD master channel pitch follows the speed multiplier. Automatic frame-window analysis remains fixed-tick and does not use the manual speedhack path.
+Record captures the current `CheckpointObject`, `GJGameState`, `EffectManagerState` and held-input metadata. Playback and analysis return to this same anchor instead of restarting the whole level.
 
-## Trajectory
+### Speedhack + immediate audio
 
-v0.2 replaces the old historical line with predictive fake-player HOLD/RELEASE branches based on the Silicate trajectory architecture (`copyAttributes`, fake players, push/release simulation). It is intentionally isolated from analyzer verdicts: exact Frame Window PASS/FAIL always comes from real PlayLayer branch simulation. Collision-complete Silicate-level predictive physics remains a separate backend target because Silicate also uses dedicated physics/collision helpers beyond the fake player itself.
+Manual speedhack operates at scheduler level. If **Audio follows speed** is enabled, FWBot applies the FMOD master-group pitch immediately and re-synchronizes it on visual frames and resets. Automatic analysis uses 1–16 exact `1/240` scheduler ticks per rendered frame and does not speed up audio.
 
-## Build
+### Trajectory cleanup and safety
 
-Portable analyzer tests:
+Predictive trajectory is **OFF by default every launch** and can only be enabled explicitly from the menu / Ctrl+F5. Old persisted `show-trajectory` state was removed.
+
+Every reset, death/branch restore, visibility toggle and PlayLayer exit destroys previous trajectory draw/fake-player nodes with `removeFromParentAndCleanup(true)`. This fixes the stale long-line accumulation from v0.2.1.
+
+Prediction uses fake-player HOLD/RELEASE branches, collision checks and save/simulate/restore of gameplay/effect state. It remains visual only: Frame Window PASS/FAIL never depends on the trajectory renderer.
+
+### Frame Window / NaNDL
+
+For each input, recorded timing is offset 0 and FWBot tests earlier/later candidate frames with real gameplay branch playback. Example: pass offsets `-1, 0, +1, +2` produce:
+
+- Early = 1
+- Late = 2
+- `FRAME WINDOW (N_i) = 4`
+
+This remains true even if the recorded click was the second valid frame of the gap. A branch can only PASS after its final recorded input frame has actually been processed, plus the configured validation frames. Fast Scan stops after the first FAIL on each side; Exhaustive Scan can discover disjoint PASS islands. NaNDL `N_i` is the contiguous passing island containing the recorded timing.
+
+## ImGui menu
+
+The menu is a black tabbed Dear ImGui interface: **Macro / Tools / Analysis / Visuals / Debug**. It defaults to a right-side safe area below the top progress UI, is draggable, is clamped inside a safe screen region and persists its position in `fwbot_imgui.ini` under the mod save directory. FWBot does not add a separate Cocos button on top of gameplay.
+
+## Build / tests
+
+Portable core:
 
 ```bash
 cmake -S . -B build-core -DFWBOT_CORE_ONLY=ON -DFWBOT_BUILD_TESTS=ON
 cmake --build build-core
 ctest --test-dir build-core --output-on-failure
+python3 tests/source_contract_tests.py
 ```
 
-The included GitHub Actions workflow builds Win64 with Geode 5.8.2 and fetches pinned Dear ImGui v1.92.4 with retry logic.
+GitHub Actions performs the authoritative Geode 5.8.2 / GD 2.2081 Win64 compile/link and produces `.geode` + PDB artifacts.
 
 ## License / credits
 
-FWBot is GPL-3.0. Selected bot architecture is derived from/inspired by Silicate and is credited in `CREDITS.md`. Dear ImGui is fetched as an external MIT-licensed dependency during the full Windows build.
+FWBot is GPL-3.0. Silicate-derived/inspired architecture is documented in `CREDITS.md`. Dear ImGui is an external MIT-licensed build dependency.
