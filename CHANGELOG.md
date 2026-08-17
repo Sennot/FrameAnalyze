@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.1.4
+- Fix Geode 5.8.2 keybind listeners by removing `mutable` from the listener closure.
+- Replace templated forwarding callback with a captureless-action function pointer (`void (*)()`) to guarantee const-invocability inside Geode EventV3.
+- Confirm from the latest GitHub Actions log that `GameHooks.cpp` now compiles; the only failing translation unit was `src/main.cpp`.
+
 ## v0.1.3
 - Fix Geode 5.8.2 keybind listener callback return type (`bool`).
 - Fix `PlayLayer*` vs `GJBaseGameLayer` hook pointer comparison in fixed-step update.

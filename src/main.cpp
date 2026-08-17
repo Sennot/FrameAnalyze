@@ -5,22 +5,37 @@
 #include <Geode/loader/GameEvent.hpp>
 #include <Geode/loader/SettingV3.hpp>
 
-#include <utility>
+#include <type_traits>
 
 using namespace geode::prelude;
 
 namespace {
 
-template <class F>
-void bindPress(char const* setting, F&& callback) {
-    listenForKeybindSettingPresses(setting,
-        [fn = std::forward<F>(callback)](Keybind const&, bool down, bool repeat, double) mutable -> bool {
-            if (down && !repeat) fn();
-            // KeybindSettingPressedEventV3 listeners return bool. Returning false
-            // lets the event continue to other listeners instead of consuming it.
-            return false;
+using KeyAction = void (*)();
+
+struct KeybindPressListener {
+    KeyAction action = nullptr;
+
+    bool operator()(Keybind const&, bool down, bool repeat, double) const {
+        if (down && !repeat && action) {
+            action();
         }
-    );
+        // Geode EventV3: false means propagate instead of consuming the event.
+        return false;
+    }
+};
+
+static_assert(std::is_invocable_r_v<
+    bool,
+    KeybindPressListener const&,
+    Keybind const&,
+    bool,
+    bool,
+    double
+>);
+
+void bindPress(char const* setting, KeyAction action) {
+    listenForKeybindSettingPresses(setting, KeybindPressListener{action});
 }
 
 } // namespace

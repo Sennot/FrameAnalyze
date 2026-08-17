@@ -1,8 +1,8 @@
-Frame Window Analyzer v0.1.3 test results
+Frame Window Analyzer v0.1.4 test results
 ========================================
 
 Portable analyzer core
-- Compiler: GCC 14.2.0
+- Compiler: Clang/GCC compatible C++23 build in sandbox
 - Standard: C++23
 - Flags: -Wall -Wextra -Wpedantic -Werror
 - Result: 100% tests passed, 0 failed
@@ -16,8 +16,21 @@ Regression coverage includes:
 - baseline failure
 - NaNDL export
 
-Geode Win64 fixes in v0.1.3
-- Keybind listener explicitly returns bool for KeybindSettingPressedEventV3
-- Fixed-step PlayLayer identity check compares common GJBaseGameLayer base pointers
+Geode keybind callback contract check
+- Reproduced Geode EventV3's const-captured listener invocation in a standalone C++23 harness.
+- v0.1.3 failed because its callback closure was `mutable` (non-const operator()).
+- v0.1.4 uses `KeybindPressListener::operator()(...) const`.
+- A static_assert in src/main.cpp verifies const-invocability and bool return type for:
+  (Keybind const&, bool, bool, double) -> bool
+- Standalone EventV3-style invocation harness compiles with -Wall -Wextra -Wpedantic -Werror.
 
-Full Geode Win64 compilation/linking must be confirmed by GitHub Actions because the sandbox does not contain the Windows GD/Geode runtime toolchain.
+Evidence from the latest real GitHub Actions run
+- Geode codegen and generated bindings compiled successfully.
+- BotController.cpp compiled.
+- TrajectoryOverlay.cpp compiled.
+- FileLogger.cpp compiled.
+- BotMenu.cpp compiled.
+- GameHooks.cpp compiled after the v0.1.3 pointer-comparison fix.
+- The only failing translation unit was src/main.cpp, with the same keybind-listener const-invocability error repeated for each bind.
+
+The next GitHub Actions run remains the authoritative Win64 link/package test because this sandbox does not have the Windows Geometry Dash/Geode runtime toolchain.
