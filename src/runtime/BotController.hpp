@@ -2,6 +2,8 @@
 
 #include "core/Types.hpp"
 #include "runtime/AnalysisSession.hpp"
+#include "runtime/PracticeAnchor.hpp"
+#include "runtime/Speedhack.hpp"
 #include "runtime/TrajectoryOverlay.hpp"
 
 #include <Geode/Geode.hpp>
@@ -32,21 +34,33 @@ public:
     void startAnalysis(PlayLayer* layer);
     void cancelAutomation();
 
-    void togglePause();
+    void toggleFrameStepper();
+    void setFrameStepper(bool enabled);
     void requestFrameStep();
+    bool consumeFrameStep();
     void toggleTrajectory();
+
+    void setSpeedhackEnabled(bool enabled);
+    void setSpeedhackSpeed(float speed);
+    void setSpeedhackAudio(bool enabled);
 
     void recordInput(bool pressed, int button, bool player1);
     void beforePhysicsStep(PlayLayer* layer);
     void afterPhysicsStep(PlayLayer* layer);
+    void beforeReset(PlayLayer* layer);
     void onReset(PlayLayer* layer);
     void onDeath(std::uint32_t frame, GameObject* cause);
     void onLevelComplete();
+    void onPlayLayerExit(PlayLayer* layer);
 
-    [[nodiscard]] bool shouldUseFixedStep() const;
-    int stepsForUpdate(float realDt);
+    [[nodiscard]] bool shouldInterceptUpdate() const;
+    [[nodiscard]] bool fixedDeltaActive() const;
+    int automatedStepsForUpdate(float realDt);
     [[nodiscard]] float fixedDt() const;
     [[nodiscard]] bool consumeResetRequest();
+    [[nodiscard]] CheckpointObject* forcedCheckpoint(PlayLayer* layer) const;
+    void restartCurrentBranch(PlayLayer* layer);
+    void onForcedCheckpointLoaded(PlayLayer* layer);
 
     [[nodiscard]] bool isInjecting() const { return m_injecting; }
     [[nodiscard]] bool suppressUserInput() const { return m_mode == BotMode::Playback || m_mode == BotMode::Analyzing; }
@@ -55,8 +69,14 @@ public:
     [[nodiscard]] std::uint32_t currentFrame() const { return m_currentFrame; }
     [[nodiscard]] Macro const& lastMacro() const { return m_lastMacro; }
     [[nodiscard]] bool hasMacro() const { return !m_lastMacro.inputs.empty(); }
-    [[nodiscard]] bool framePaused() const { return m_framePaused; }
+    [[nodiscard]] bool frameStepperEnabled() const { return m_frameStepper; }
+    [[nodiscard]] int pendingSteps() const { return m_stepRequests; }
     [[nodiscard]] bool trajectoryVisible() const { return m_trajectoryVisible; }
+    [[nodiscard]] bool hasPracticeAnchor() const { return m_anchor.checkpoint() != nullptr; }
+    [[nodiscard]] bool speedhackEnabled() const { return m_speedhack.enabled(); }
+    [[nodiscard]] bool speedhackAudio() const { return m_speedhack.audioFollow(); }
+    [[nodiscard]] float speedhackSpeed() const { return m_speedhack.speed(); }
+    [[nodiscard]] float gameplaySpeed() const { return m_speedhack.effectiveSpeed(); }
     [[nodiscard]] std::string statusText() const;
 
 private:
@@ -64,6 +84,8 @@ private:
     void advanceAnalysis(std::string const& reason, bool passed);
     void finishAnalysis();
     void fillLevelMetadata(PlayLayer* layer, Macro& macro);
+    bool captureAnchor(PlayLayer* layer, Macro& macro);
+    void requestAnchorRestore(PlayLayer* layer);
     int settingInt(char const* key, int fallback) const;
     bool settingBool(char const* key, bool fallback) const;
 
@@ -71,6 +93,8 @@ private:
     Macro m_recordingMacro;
     Macro m_lastMacro;
     AnalysisSession m_analysis;
+    PracticeAnchor m_anchor;
+    Speedhack m_speedhack;
     TrajectoryOverlay m_trajectory;
 
     std::uint32_t m_currentFrame = 0;
@@ -80,9 +104,10 @@ private:
     bool m_injecting = false;
     bool m_pendingReset = false;
     bool m_branchResolved = false;
-    bool m_framePaused = false;
+    bool m_frameStepper = false;
     int m_stepRequests = 0;
     bool m_trajectoryVisible = true;
+    bool m_forceAnchorLoad = false;
 };
 
 } // namespace fwa

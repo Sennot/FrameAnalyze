@@ -40,6 +40,7 @@ private:
     void buildJobs();
     bool shouldSkip(AnalysisJob const& job) const;
     bool makeCandidate(AnalysisJob const& job);
+    bool validateInputOrder(Macro const& macro) const;
     void finalizeResults();
 
     Macro m_source;

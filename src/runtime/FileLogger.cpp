@@ -25,7 +25,7 @@ void FileLogger::initialize() {
     std::filesystem::create_directories(m_logDir / "debug");
     m_debugPath = m_logDir / "debug" / "latest.log";
     std::ofstream out(m_debugPath, std::ios::trunc);
-    out << "Frame Window Analyzer debug log\n";
+    out << "FWBot debug log\n";
     out << "Started: " << timestamp(false) << "\n";
 }
 
@@ -53,7 +53,7 @@ void FileLogger::debug(std::string const& message) {
 std::string FileLogger::cleanReport(Macro const& macro, std::vector<FrameWindowResult> const& results) const {
     std::ostringstream out;
     out << "============================================================\n";
-    out << "FRAME WINDOW ANALYZER\n";
+    out << "FWBOT FRAME WINDOW ANALYSIS\n";
     out << "============================================================\n\n";
     out << "Level: " << (macro.levelName.empty() ? "Unknown" : macro.levelName) << '\n';
     out << "Level ID: " << macro.levelId << '\n';
@@ -98,7 +98,7 @@ std::string FileLogger::cleanReport(Macro const& macro, std::vector<FrameWindowR
 std::filesystem::path FileLogger::exportAnalysis(Macro const& macro, std::vector<FrameWindowResult> const& results) {
     std::scoped_lock lock(m_mutex);
     std::filesystem::create_directories(m_logDir);
-    auto stem = std::string("frame-window_") + timestamp(true);
+    auto stem = std::string("fwbot-frame-window_") + timestamp(true);
     auto logPath = m_logDir / (stem + ".log");
     auto jsonPath = m_logDir / (stem + "_nandl.json");
     auto csvPath = m_logDir / (stem + "_nandl.csv");

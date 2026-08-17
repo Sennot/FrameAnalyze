@@ -135,6 +135,34 @@ int main() {
         assert(session.results()[0].frameWindow == 2);
     }
 
-    std::cout << "All Frame Window Analyzer core tests passed.\n";
+
+    {
+        // A HOLD shifted past its paired RELEASE is not a meaningful timing branch.
+        Macro macro;
+        auto hold = inputAt(10, InputAction::Hold); hold.sequence = 0;
+        auto release = inputAt(11, InputAction::Release); release.sequence = 1;
+        macro.inputs = {hold, release};
+
+        AnalysisSession session;
+        session.start(macro, 2, 0, true);
+        // Baseline HOLD.
+        assert(session.prepareNextSimulation());
+        session.finishCurrent(true, "baseline");
+        // offset -1 valid.
+        assert(session.prepareNextSimulation());
+        session.finishCurrent(true, "early");
+        // offset +1 puts HOLD and RELEASE on same frame; sequence still HOLD then RELEASE, valid.
+        assert(session.prepareNextSimulation());
+        session.finishCurrent(true, "same-frame");
+        // offset -2 valid.
+        assert(session.prepareNextSimulation());
+        session.finishCurrent(true, "early2");
+        // offset +2 crosses RELEASE; makeCandidate resolves it internally as FAIL and proceeds to input #2 baseline.
+        assert(session.prepareNextSimulation());
+        assert(session.currentJob().inputIndex == 1);
+        assert(session.currentJob().offset == 0);
+    }
+
+    std::cout << "All FWBot frame-window core tests passed.\n";
     return 0;
 }

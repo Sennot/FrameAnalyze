@@ -1,27 +1,16 @@
-# Credits and provenance
+# Credits
 
 ## Silicate
 
-Frame Window Analyzer was designed after studying Silicate's public Geometry Dash bot architecture, especially its ideas around:
-
-- deterministic replay inputs (frame / player / button / press state),
-- fixed-timestep stepping and frame stepping,
-- trajectory visualization,
-- replay-driven simulation and state restoration concepts.
+FWBot's bot architecture intentionally uses selected ideas and implementation patterns from Silicate rather than embedding the entire mod: deterministic fixed-tick update/frame stepping, practice/checkpoint restoration, replay-oriented HOLD/RELEASE inputs, audio speedhack behavior, and predictive fake-player trajectory structure.
 
 Silicate source: https://git.silicate.dev/silicate/silicate
+Silicate license: GPL-3.0
 
-Silicate is distributed under GNU GPL v3. Frame Window Analyzer is therefore also distributed under GPL v3 so that future code adapted from Silicate can remain license-compatible.
+FWBot itself is distributed under GPL-3.0.
 
-**This v0.1 source package is an independently written implementation; it does not vendor or copy Silicate source files verbatim.** If later versions directly adapt Silicate functions, preserve their notices and document the exact files/functions here.
+## Dear ImGui
 
-## NaNDL / NaN GD
+FWBot v0.2 uses Dear ImGui for its Windows overlay UI and the standard Win32 + OpenGL3 backends. Dear ImGui is fetched at build time and is licensed under the MIT License.
 
-The calculator export is designed around the public NaNDL Frame Window definition and formula:
-
-- `N_i`: number of frames/ticks available to pass input `i`
-- `w_i = N_i / f`
-
-Website: https://nandl.pages.dev/
-
-NaNDL is credited for the public calculation model; no NaNDL site source code is included in this repository.
+Dear ImGui: https://github.com/ocornut/imgui

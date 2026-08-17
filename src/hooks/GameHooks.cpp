@@ -10,12 +10,11 @@ using namespace geode::prelude;
 
 namespace fwa {
 
-class $modify(FWAGameLayerHook, GJBaseGameLayer) {
+class $modify(FWBotGameLayerHook, GJBaseGameLayer) {
     void handleButton(bool pressed, int button, bool player1) {
         auto& bot = BotController::get();
-        if (!bot.isInjecting() && bot.suppressUserInput()) {
-            return;
-        }
+        if (!bot.isInjecting() && bot.suppressUserInput()) return;
+
         GJBaseGameLayer::handleButton(pressed, button, player1);
         if (!bot.isInjecting()) bot.recordInput(pressed, button, player1);
     }
@@ -23,43 +22,72 @@ class $modify(FWAGameLayerHook, GJBaseGameLayer) {
     void update(float dt) override {
         auto& bot = BotController::get();
         auto* play = PlayLayer::get();
-        if (!play ||
-            static_cast<GJBaseGameLayer*>(play) != static_cast<GJBaseGameLayer*>(this) ||
-            !bot.shouldUseFixedStep()) {
+        bool currentPlayLayer = play &&
+            static_cast<GJBaseGameLayer*>(play) == static_cast<GJBaseGameLayer*>(this);
+
+        if (!currentPlayLayer || !bot.shouldInterceptUpdate()) {
             GJBaseGameLayer::update(dt);
             return;
         }
 
-        int steps = bot.stepsForUpdate(dt);
-        for (int i = 0; i < steps; ++i) {
+        // Silicate-style frame stepping: no PauseLayer. When enabled, gameplay physics
+        // simply does not receive an update until a step request is consumed.
+        if (bot.frameStepperEnabled()) {
+            if (!bot.consumeFrameStep()) return;
+            play->m_extraDelta = 0.0f;
             bot.beforePhysicsStep(play);
             GJBaseGameLayer::update(bot.fixedDt());
             bot.afterPhysicsStep(play);
-            if (bot.consumeResetRequest()) {
-                play->resetLevel();
-                break;
-            }
+            if (bot.consumeResetRequest()) bot.restartCurrentBranch(play);
+            return;
         }
+
+        // Recording/playback/analyze use deterministic fixed physics ticks.
+        if (bot.mode() != BotMode::Idle) {
+            int steps = bot.automatedStepsForUpdate(dt);
+            for (int i = 0; i < steps; ++i) {
+                bot.beforePhysicsStep(play);
+                GJBaseGameLayer::update(bot.fixedDt());
+                bot.afterPhysicsStep(play);
+                if (bot.consumeResetRequest()) {
+                    bot.restartCurrentBranch(play);
+                    break;
+                }
+            }
+            return;
+        }
+
+        // Manual FWBot speedhack intentionally affects normal gameplay dt. Analysis
+        // never uses this path; it always uses the fixed-tick branch above.
+        GJBaseGameLayer::update(dt * bot.gameplaySpeed());
     }
 
     double getModifiedDelta(float dt) {
         auto& bot = BotController::get();
-        if (!PlayLayer::get() || !bot.shouldUseFixedStep()) {
+        if (!PlayLayer::get() || !bot.fixedDeltaActive()) {
             return GJBaseGameLayer::getModifiedDelta(dt);
         }
-
-        // Lock physics delta to the analyzer TPS while preserving GD's slow-time
-        // component. This follows the same fixed-delta principle used by bot tools
-        // such as Silicate without copying their implementation.
         float timeWarp = std::min(this->m_gameState.m_timeWarp, 1.0f);
         return static_cast<double>(bot.fixedDt() * timeWarp);
     }
 };
 
-class $modify(FWAPlayLayerHook, PlayLayer) {
+class $modify(FWBotPlayLayerHook, PlayLayer) {
     void resetLevel() {
+        auto& bot = BotController::get();
+        bot.beforeReset(this);
         PlayLayer::resetLevel();
-        BotController::get().onReset(this);
+        bot.onReset(this);
+    }
+
+    void loadFromCheckpoint(CheckpointObject* object) {
+        auto& bot = BotController::get();
+        if (auto* forced = bot.forcedCheckpoint(this)) {
+            PlayLayer::loadFromCheckpoint(forced);
+            bot.onForcedCheckpointLoaded(this);
+            return;
+        }
+        PlayLayer::loadFromCheckpoint(object);
     }
 
     void destroyPlayer(PlayerObject* player, GameObject* cause) {
@@ -77,10 +105,13 @@ class $modify(FWAPlayLayerHook, PlayLayer) {
             bot.onLevelComplete();
             return;
         }
-        if (bot.mode() == BotMode::Recording) {
-            bot.stopRecording(this, false);
-        }
+        if (bot.mode() == BotMode::Recording) bot.stopRecording(this, false);
         PlayLayer::levelComplete();
+    }
+
+    void onExit() override {
+        BotController::get().onPlayLayerExit(this);
+        PlayLayer::onExit();
     }
 };
 

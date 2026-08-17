@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <tuple>
 #include <utility>
 
 namespace fwa {
@@ -55,6 +56,25 @@ bool AnalysisSession::shouldSkip(AnalysisJob const& job) const {
     return it != m_rightStopped.end() && it->second;
 }
 
+
+bool AnalysisSession::validateInputOrder(Macro const& macro) const {
+    std::map<std::pair<bool, int>, bool> held;
+    for (int button = 1; button <= 3; ++button) {
+        held[{false, button}] = macro.anchorInputs.held(false, button);
+        held[{true, button}] = macro.anchorInputs.held(true, button);
+    }
+
+    for (auto const& input : macro.inputs) {
+        auto key = std::make_pair(input.player2, input.button);
+        bool wasHeld = held.contains(key) ? held[key] : false;
+        if (input.action == InputAction::Release && !wasHeld) {
+            return false;
+        }
+        held[key] = input.action == InputAction::Hold;
+    }
+    return true;
+}
+
 bool AnalysisSession::makeCandidate(AnalysisJob const& job) {
     if (job.inputIndex >= m_source.inputs.size()) return false;
 
@@ -69,6 +89,8 @@ bool AnalysisSession::makeCandidate(AnalysisJob const& job) {
         if (a.frame != b.frame) return a.frame < b.frame;
         return a.sequence < b.sequence;
     });
+
+    if (!validateInputOrder(m_candidate)) return false;
 
     auto end = std::max(m_candidate.lastFrame(), static_cast<std::uint32_t>(shifted));
     auto extra = static_cast<std::uint64_t>(m_postMacroValidationFrames);

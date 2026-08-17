@@ -1,5 +1,5 @@
 #include "runtime/BotController.hpp"
-#include "ui/BotMenu.hpp"
+#include "ui/ImGuiOverlay.hpp"
 
 #include <Geode/Geode.hpp>
 #include <Geode/loader/GameEvent.hpp>
@@ -15,24 +15,13 @@ using KeyAction = void (*)();
 
 struct KeybindPressListener {
     KeyAction action = nullptr;
-
     bool operator()(Keybind const&, bool down, bool repeat, double) const {
-        if (down && !repeat && action) {
-            action();
-        }
-        // Geode EventV3: false means propagate instead of consuming the event.
+        if (down && !repeat && action) action();
         return false;
     }
 };
 
-static_assert(std::is_invocable_r_v<
-    bool,
-    KeybindPressListener const&,
-    Keybind const&,
-    bool,
-    bool,
-    double
->);
+static_assert(std::is_invocable_r_v<bool, KeybindPressListener const&, Keybind const&, bool, bool, double>);
 
 void bindPress(char const* setting, KeyAction action) {
     listenForKeybindSettingPresses(setting, KeybindPressListener{action});
@@ -43,23 +32,15 @@ void bindPress(char const* setting, KeyAction action) {
 $on_game(Loaded) {
     fwa::BotController::get().initialize();
 
-    bindPress("open-menu", [] { fwa::BotMenu::toggle(); });
-    bindPress("toggle-record", [] {
-        fwa::BotController::get().toggleRecording(PlayLayer::get());
+    bindPress("open-menu", [] { fwa::ImGuiOverlay::get().toggle(); });
+    bindPress("toggle-speedhack", [] {
+        auto& bot = fwa::BotController::get();
+        bot.setSpeedhackEnabled(!bot.speedhackEnabled());
     });
-    bindPress("playback", [] {
-        fwa::BotController::get().startPlayback(PlayLayer::get());
-    });
-    bindPress("toggle-pause", [] {
-        fwa::BotController::get().togglePause();
-    });
-    bindPress("frame-step", [] {
-        fwa::BotController::get().requestFrameStep();
-    });
-    bindPress("toggle-trajectory", [] {
-        fwa::BotController::get().toggleTrajectory();
-    });
-    bindPress("analyze-last", [] {
-        fwa::BotController::get().startAnalysis(PlayLayer::get());
-    });
+    bindPress("toggle-record", [] { fwa::BotController::get().toggleRecording(PlayLayer::get()); });
+    bindPress("playback", [] { fwa::BotController::get().startPlayback(PlayLayer::get()); });
+    bindPress("toggle-pause", [] { fwa::BotController::get().toggleFrameStepper(); });
+    bindPress("frame-step", [] { fwa::BotController::get().requestFrameStep(); });
+    bindPress("toggle-trajectory", [] { fwa::BotController::get().toggleTrajectory(); });
+    bindPress("analyze-last", [] { fwa::BotController::get().startAnalysis(PlayLayer::get()); });
 }

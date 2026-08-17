@@ -1,119 +1,63 @@
-# Frame Window Analyzer — Geode mod prototype v0.1.2
+# FWBot v0.2.0
 
-Frame Window Analyzer records a deterministic Geometry Dash input macro and automatically measures the passing frame window around every recorded **HOLD** and **RELEASE**.
+FWBot is a Windows Geode bot for Geometry Dash 2.2081 / Geode 5.8.2 focused on deterministic practice recording and automatic HOLD/RELEASE frame-window analysis.
 
-## What v0.1 does
+## Core workflow
 
-1. Start recording. The mod resets the level so frame 0 is deterministic.
-2. Inputs are recorded as `frame / P1-P2 / button / HOLD-RELEASE`.
-3. Playback replays those inputs at a fixed analysis TPS.
-4. Analyzer changes exactly one input at a time by `-1,+1,-2,+2...` frames.
-5. The modified branch is replayed with the real `PlayLayer` physics.
-6. A branch passes if it survives the full macro plus `Post-macro Validation Frames`, or reaches `levelComplete()`.
-7. A branch fails when `destroyPlayer()` fires.
-8. The contiguous PASS island containing offset 0 becomes NaNDL `N_i`.
-9. By default, stopping a non-empty recording immediately starts analysis; a clean `.log`, `_nandl.json`, and `_nandl.csv` are then written to the mod save directory under `logs/`. This can be disabled with **Analyze after recording**.
-10. `logs/debug/latest.log` contains detailed branch/debug information.
+1. Enter Practice Mode and place a checkpoint just before the section you want to analyze.
+2. Open FWBot with **F8**.
+3. Press **F6** (or Record in the ImGui panel). Frame 0 becomes the current gameplay/practice state; FWBot does not restart the level.
+4. Play the section. You can enable FWBot Frame Stepper with **F4**, then use **F5** for one physics tick at a time.
+5. Press **F6** again to stop. With Auto Analyze enabled, FWBot restores the saved anchor and tests every HOLD/RELEASE at earlier/later frames.
+6. Reports are written to the mod save directory under `logs/` as `.log`, `_nandl.csv`, `_nandl.json`. Detailed diagnostics are in `logs/debug/latest.log`.
 
-This deliberately favors correctness over a fake geometry-only approximation. A future snapshot backend can accelerate the same analyzer without changing the output format.
+## Binds
 
-## Frame-window meaning
+- F3 — FWBot speedhack toggle
+- F4 — Frame Stepper toggle (physics freeze; **not** Geometry Dash PauseLayer)
+- F5 — Next physics frame
+- F6 — Start/stop recording from current practice state
+- F7 — Playback last macro from its practice anchor
+- F8 — FWBot ImGui menu
+- Ctrl+F5 — trajectory
+- Ctrl+F7 — analyze last macro
 
-For each input the report stores:
+All binds are editable in Geode settings.
 
-- `Early`: consecutive passing frames before the recorded input,
-- `Late`: consecutive passing frames after it,
-- `FRAME WINDOW (N_i)`: the size of the contiguous passing segment containing the recorded frame,
-- all tested offsets,
-- all passing segments when **Exhaustive Scan** is enabled.
+## Frame Window / NaNDL
 
-Example: `-2 PASS, -1 PASS, 0 PASS, +1 PASS, +2 FAIL` gives `Early=2`, `Late=1`, `N_i=4`.
+For each input FWBot treats the recorded successful frame as offset 0, then tests frames to the left and right using real gameplay branches. Example: if a wave timing is passable on offsets `-1, 0, +1, +2`, the result is `Early=1`, `Late=2`, `N_i=4` even if the recorded click was the second valid frame.
 
-If a passing segment reaches the configured scan boundary, the report prints a warning so you know to increase **Frame Scan Radius**.
+`FRAME WINDOW (N_i)` is exported for NaNDL together with frame/time data. Exhaustive Scan can reveal disjoint passing segments; the NaNDL value remains the contiguous passing island containing the recorded timing.
 
-### Four-frame window example
+## Practice anchor
 
-If a wave timing has four valid ticks and the recorded click lands on the second valid tick, the analyzer still reports the full window. For example, `-1 PASS, 0 PASS, +1 PASS, +2 PASS` with failures outside that range gives `Early=1`, `Late=2`, `N_i=4`. The recorded frame is only the anchor used to search both directions; it is not treated as the whole window.
+The v0.2 runtime captures a retained `CheckpointObject` plus input-state metadata at Record start. Playback and analysis force-load that anchor rather than resetting to frame 0 of the level. This is the same high-level model used by Silicate's practice/checkpoint system, while FWBot keeps a smaller state surface.
 
-## NaNDL export
+## Frame Stepper
 
-The calculator-facing export contains:
+The stepper intercepts gameplay update directly. When enabled with no queued step, game physics receives no update; UI/rendering remain alive. `Next frame` consumes one request, clears extra delta, and advances exactly one FWBot fixed physics tick. Disabling the stepper clears queued/overflow state so the game does not catch up in a burst.
 
-- Game FPS
-- Window FPS
-- respawn time
-- Use Frame Numbers
-- rows: Input number / Time / Frame window
+## Speedhack + audio
 
-`*_nandl.csv` uses the same three visible row columns and is the safest fallback for copying values into the calculator.
+FWBot includes a manual speedhack. If `Audio follows speed` is enabled, the FMOD master channel pitch follows the speed multiplier. Automatic frame-window analysis remains fixed-tick and does not use the manual speedhack path.
 
-`*_nandl.json` uses readable keys (`gameFPS`, `windowFPS`, `respawnTime`, `useFrameNumbers`, `inputs`). The NaNDL page publicly documents what its JSON export contains, but not the exact serialized key schema in its rendered documentation. If its importer rejects this file, export one example JSON from NaNDL and compare/send it; the exporter is isolated in `src/core/NaNDLExport.cpp` and is trivial to match exactly.
+## Trajectory
 
-## Menu and keybinds
-
-Default keybinds:
-
-| Action | Default |
-|---|---|
-| Open bot menu | `F8` |
-| Start/stop recording | `F6` |
-| Playback last macro | `F7` |
-| Pause fixed-step simulation | `F4` |
-| Step exactly one frame | `F5` |
-| Show/hide trajectory | `Ctrl+F5` |
-| Analyze last macro | `Ctrl+F7` |
-
-All bindings are native Geode v5 **keybind settings**, so the player can change them in Geode's mod settings.
-
-The menu is a small native Cocos/Geode overlay rather than ImGui. That avoids adding a large UI dependency only for six buttons. It exposes Record, Playback, Analyze, Pause, Frame Step, and Trajectory.
-
-## Important v0.1 limitations
-
-- The analyzer currently replays from level start for each candidate. It is exact with respect to the gameplay branch it runs, but not yet the high-speed Silicate-style snapshot/backstep backend.
-- Recording intentionally starts from a level reset. Practice checkpoints / arbitrary mid-level start states are not serialized yet.
-- The trajectory toggle draws the **actual simulated path**. Predictive fake-player trajectory is planned for the snapshot backend.
-- Fast mode assumes the useful window around the recorded timing is contiguous and stops scanning a side after its first failure. Enable **Exhaustive Scan** to test every offset and detect disjoint PASS islands.
-- A branch surviving until the configured post-macro horizon is counted as PASS. For macros that stop long before the consequence of an input, increase `Post-macro Validation Frames` or record farther.
+v0.2 replaces the old historical line with predictive fake-player HOLD/RELEASE branches based on the Silicate trajectory architecture (`copyAttributes`, fake players, push/release simulation). It is intentionally isolated from analyzer verdicts: exact Frame Window PASS/FAIL always comes from real PlayLayer branch simulation. Collision-complete Silicate-level predictive physics remains a separate backend target because Silicate also uses dedicated physics/collision helpers beyond the fake player itself.
 
 ## Build
 
-### Local portable core tests (no Geode SDK)
+Portable analyzer tests:
 
-```sh
-cmake -S . -B build-core -DFWA_CORE_ONLY=ON -DFWA_BUILD_TESTS=ON
+```bash
+cmake -S . -B build-core -DFWBOT_CORE_ONLY=ON -DFWBOT_BUILD_TESTS=ON
 cmake --build build-core
 ctest --test-dir build-core --output-on-failure
 ```
 
-### Geode build
-
-Install the Geode CLI/SDK, then:
-
-```sh
-geode build
-```
-
-The project targets:
-
-- Geode `5.8.2`
-- Geometry Dash Windows `2.2081`
-
-### GitHub Actions
-
-`.github/workflows/build.yml` runs portable core tests first, then builds Win64 using the official `geode-sdk/build-geode-mod` action and uploads the `.geode`/debug output as an artifact.
-
-## Debugging
-
-When reporting a bad window, include:
-
-1. `logs/debug/latest.log`
-2. the clean `frame-window_*.log`
-3. the corresponding `_nandl.json`
-4. what input/frame you believe is wrong
-5. whether Exhaustive Scan was enabled
-
-The debug log records input number, offset, PASS/FAIL, failure frame, and branch reason. This is specifically intended to make orb/dual/slope/game-mode desyncs diagnosable.
+The included GitHub Actions workflow builds Win64 with Geode 5.8.2 and fetches pinned Dear ImGui v1.92.4 with retry logic.
 
 ## License / credits
 
-GPL-3.0. See `LICENSE` and `CREDITS.md`.
+FWBot is GPL-3.0. Selected bot architecture is derived from/inspired by Silicate and is credited in `CREDITS.md`. Dear ImGui is fetched as an external MIT-licensed dependency during the full Windows build.

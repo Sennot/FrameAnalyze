@@ -2,48 +2,8 @@
 
 Target: Geode SDK v5.8.2, Geometry Dash 2.2081, Win64.
 
-## KeybindSettingPressedEventV3 — corrected in v0.1.4
-
-Geode 5.8.2 declares `listenForKeybindSettingPresses` with a callback constraint equivalent to:
-
-```cpp
-std::is_invocable_v<Callback, Keybind const&, bool, bool, double>
-```
-
-and `KeybindSettingPressedEventV3` uses the listener signature:
-
-```cpp
-bool(Keybind const&, bool down, bool repeat, double timestamp)
-```
-
-The v0.1.3 callback returned `bool`, but was declared `mutable`. Geode's EventV3 machinery stores/captures the listener and invokes it through a const callable context. A mutable lambda has a non-const `operator()`, so `std::invoke` rejected it.
-
-v0.1.4 removes that ambiguity entirely. It uses an explicit listener type:
-
-```cpp
-struct KeybindPressListener {
-    KeyAction action;
-    bool operator()(Keybind const&, bool down, bool repeat, double) const;
-};
-```
-
-`src/main.cpp` also contains a `static_assert(std::is_invocable_r_v<...>)` for the exact const invocation contract.
-
-## GJBaseGameLayer update hook — corrected in v0.1.3
-
-The fixed-step hook modifies `GJBaseGameLayer::update(float)`. `PlayLayer::get()` returns `PlayLayer*`, while `this` inside the modify class is `FWAGameLayerHook*`. v0.1.2 compared those distinct pointer types directly. v0.1.3 converts both to their common `GJBaseGameLayer*` base before comparing.
-
-## Confirmed by the latest GitHub Actions compile log
-
-The latest real Win64 run reached Geode codegen/bindings and compiled these project translation units successfully:
-
-- `src/runtime/BotController.cpp`
-- `src/runtime/TrajectoryOverlay.cpp`
-- `src/runtime/FileLogger.cpp`
-- `src/ui/BotMenu.cpp`
-- `src/hooks/GameHooks.cpp`
-
-The run stopped only because `src/main.cpp` failed on the mutable keybind callback. Therefore the hook signatures below have already been accepted by Clang + generated Geode 5.8.2 bindings in CI:
+## Previously confirmed by real GitHub Actions
+The v0.1.4 codebase reached Geode codegen/generated bindings and compiled the runtime after fixing the keybind listener contract. The following v0.1 hook signatures were accepted:
 
 - `GJBaseGameLayer::handleButton(bool, int, bool)`
 - `GJBaseGameLayer::update(float)`
@@ -51,5 +11,30 @@ The run stopped only because `src/main.cpp` failed on the mutable keybind callba
 - `PlayLayer::resetLevel()`
 - `PlayLayer::destroyPlayer(PlayerObject*, GameObject*)`
 - `PlayLayer::levelComplete()`
+- `PlayLayer::onExit()`
 
-The next GitHub Actions run is the authoritative full Win64 link/package test.
+The v0.2 GameLayer/PlayLayer hooks intentionally keep those already-proven signatures.
+
+## Keybind listener contract
+`listenForKeybindSettingPresses` requires a const-invocable bool callback compatible with:
+
+```cpp
+(Keybind const&, bool down, bool repeat, double timestamp) -> bool
+```
+
+`src/main.cpp` keeps the v0.1.4 `KeybindPressListener::operator()(...) const` implementation and a `static_assert` for this contract.
+
+## New v0.2 Geode-facing surfaces
+The architecture rebuild additionally uses:
+
+- `PlayLayer::createCheckpoint()` / `loadFromCheckpoint(CheckpointObject*)`
+- `GJGameState` and `EffectManagerState`
+- `GJEffectManager::saveToState` / `loadFromState`
+- `PlayerObject::copyAttributes`, `pushButton`, `releaseButton`, `update`, `updateRotation`
+- `FMODAudioEngine::m_system` + FMOD master `ChannelGroup::setPitch`
+- `CCEGLView::swapBuffers()` for the ImGui render hook
+
+These are audited against the same Geode/Silicate API surface, but the included GitHub Actions Win64 job remains the authoritative compiler/linker check for v0.2 because the sandbox cannot run the Windows GD/Geode toolchain.
+
+## UI/link audit
+Dear ImGui uses its standard Win32 and OpenGL3 backends. CMake explicitly links `opengl32`, `user32`, `gdi32`, and `imm32` on the Win64 mod target.

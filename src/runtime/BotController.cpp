@@ -18,26 +18,21 @@ BotController& BotController::get() {
 }
 
 int BotController::settingInt(char const* key, int fallback) const {
-    try {
-        return static_cast<int>(Mod::get()->getSettingValue<std::int64_t>(key));
-    } catch (...) {
-        return fallback;
-    }
+    try { return static_cast<int>(Mod::get()->getSettingValue<std::int64_t>(key)); }
+    catch (...) { return fallback; }
 }
 
 bool BotController::settingBool(char const* key, bool fallback) const {
-    try {
-        return Mod::get()->getSettingValue<bool>(key);
-    } catch (...) {
-        return fallback;
-    }
+    try { return Mod::get()->getSettingValue<bool>(key); }
+    catch (...) { return fallback; }
 }
 
 void BotController::initialize() {
     FileLogger::get().initialize();
     m_trajectoryVisible = settingBool("show-trajectory", true);
     m_trajectory.setVisible(m_trajectoryVisible);
-    FileLogger::get().debug("[Bot] initialized");
+    m_speedhack.setAudioFollow(settingBool("speedhack-audio", true));
+    FileLogger::get().debug("[FWBot] initialized v0.2 architecture");
 }
 
 void BotController::fillLevelMetadata(PlayLayer* layer, Macro& macro) {
@@ -45,11 +40,28 @@ void BotController::fillLevelMetadata(PlayLayer* layer, Macro& macro) {
     macro.windowFps = macro.gameFps;
     macro.levelName = "Current Level";
     macro.levelId = 0;
-
-    // GJGameLevel fields have changed type between bindings versions. Keeping the
-    // analyzer independent of those fields avoids a hard binding dependency here;
-    // gameplay logs still contain exact frame/input data. Metadata can be enriched later.
     (void)layer;
+}
+
+bool BotController::captureAnchor(PlayLayer* layer, Macro& macro) {
+    if (!m_anchor.capture(layer)) return false;
+    macro.practiceAnchored = true;
+    macro.anchorInputs = m_anchor.inputs();
+    return true;
+}
+
+void BotController::requestAnchorRestore(PlayLayer* layer) {
+    if (!layer || !m_anchor.validFor(layer)) {
+        FileLogger::get().debug("[Practice] restore requested without a valid anchor");
+        return;
+    }
+    m_forceAnchorLoad = true;
+    m_currentFrame = 0;
+    m_playbackCursor = 0;
+    m_accumulator = 0.0;
+    m_branchResolved = false;
+    layer->m_extraDelta = 0.0f;
+    layer->resetLevel();
 }
 
 void BotController::toggleRecording(PlayLayer* layer) {
@@ -60,16 +72,23 @@ void BotController::toggleRecording(PlayLayer* layer) {
 void BotController::startRecording(PlayLayer* layer) {
     if (!layer) return;
     cancelAutomation();
-    m_mode = BotMode::Recording;
+
     m_recordingMacro = {};
     fillLevelMetadata(layer, m_recordingMacro);
+    if (!captureAnchor(layer, m_recordingMacro)) return;
+
+    // Recording begins exactly where the player currently is. In practice mode this
+    // means: place a checkpoint before the timing, position yourself, then press Record.
+    m_mode = BotMode::Recording;
     m_currentFrame = 0;
     m_playbackCursor = 0;
     m_sequence = 0;
     m_accumulator = 0.0;
     m_pendingReset = false;
-    FileLogger::get().debug("[Record] start; resetting level for deterministic frame 0");
-    layer->resetLevel();
+    m_branchResolved = false;
+    layer->m_extraDelta = 0.0f;
+    m_trajectory.reset(layer);
+    FileLogger::get().debug("[Record] started from current Practice/gameplay state; frame 0 is FWBot anchor");
 }
 
 void BotController::stopRecording(PlayLayer* layer, bool allowAutoAnalyze) {
@@ -79,10 +98,12 @@ void BotController::stopRecording(PlayLayer* layer, bool allowAutoAnalyze) {
     m_accumulator = 0.0;
 
     std::ostringstream msg;
-    msg << "[Record] stop; inputs=" << m_lastMacro.inputs.size() << ", lastFrame=" << m_lastMacro.lastFrame();
+    msg << "[Record] stop; inputs=" << m_lastMacro.inputs.size()
+        << " lastFrame=" << m_lastMacro.lastFrame()
+        << " practiceAnchor=" << (m_lastMacro.practiceAnchored ? "yes" : "no");
     FileLogger::get().debug(msg.str());
 
-    if (allowAutoAnalyze && layer && !m_lastMacro.inputs.empty() && settingBool("auto-analyze", false)) {
+    if (allowAutoAnalyze && layer && !m_lastMacro.inputs.empty() && settingBool("auto-analyze", true)) {
         startAnalysis(layer);
     }
 }
@@ -90,20 +111,21 @@ void BotController::stopRecording(PlayLayer* layer, bool allowAutoAnalyze) {
 void BotController::startPlayback(PlayLayer* layer) {
     if (!layer) return;
     if (m_mode == BotMode::Recording) stopRecording(layer, false);
-    if (m_lastMacro.inputs.empty()) return;
+    if (m_lastMacro.inputs.empty() || !m_anchor.validFor(layer)) return;
+
     cancelAutomation();
     m_mode = BotMode::Playback;
     m_currentFrame = 0;
     m_playbackCursor = 0;
     m_accumulator = 0.0;
-    FileLogger::get().debug("[Playback] start");
-    layer->resetLevel();
+    FileLogger::get().debug("[Playback] restoring Practice anchor");
+    requestAnchorRestore(layer);
 }
 
 void BotController::startAnalysis(PlayLayer* layer) {
     if (!layer) return;
     if (m_mode == BotMode::Recording) stopRecording(layer, false);
-    if (m_lastMacro.inputs.empty()) return;
+    if (m_lastMacro.inputs.empty() || !m_anchor.validFor(layer)) return;
     cancelAutomation();
 
     int radius = settingInt("scan-radius", 12);
@@ -127,33 +149,65 @@ void BotController::startAnalysis(PlayLayer* layer) {
         << " radius=" << radius << " exhaustive=" << (exhaustive ? "true" : "false")
         << " first=input#" << (job.inputIndex + 1) << " offset=" << job.offset;
     FileLogger::get().debug(msg.str());
-    layer->resetLevel();
+    requestAnchorRestore(layer);
 }
 
 void BotController::cancelAutomation() {
     if (m_mode == BotMode::Analyzing) m_analysis.cancel();
     if (m_mode == BotMode::Playback || m_mode == BotMode::Analyzing) m_mode = BotMode::Idle;
     m_pendingReset = false;
+    m_forceAnchorLoad = false;
     m_playbackCursor = 0;
     m_accumulator = 0.0;
+    m_branchResolved = false;
 }
 
-void BotController::togglePause() {
-    m_framePaused = !m_framePaused;
+void BotController::toggleFrameStepper() {
+    setFrameStepper(!m_frameStepper);
+}
+
+void BotController::setFrameStepper(bool enabled) {
+    m_frameStepper = enabled;
     m_stepRequests = 0;
-    FileLogger::get().debug(std::string("[Stepper] pause=") + (m_framePaused ? "true" : "false"));
+    m_accumulator = 0.0;
+    if (auto* play = PlayLayer::get()) play->m_extraDelta = 0.0f;
+    FileLogger::get().debug(std::string("[Stepper] enabled=") + (enabled ? "true" : "false"));
 }
 
 void BotController::requestFrameStep() {
-    m_framePaused = true;
-    m_stepRequests = std::min(m_stepRequests + 1, 32);
-    FileLogger::get().debug("[Stepper] requested one physics frame");
+    if (!m_frameStepper) setFrameStepper(true);
+    m_stepRequests = std::min(m_stepRequests + 1, 64);
+    FileLogger::get().debug("[Stepper] queued exactly one physics tick");
+}
+
+bool BotController::consumeFrameStep() {
+    if (!m_frameStepper || m_stepRequests <= 0) return false;
+    --m_stepRequests;
+    return true;
 }
 
 void BotController::toggleTrajectory() {
     m_trajectoryVisible = !m_trajectoryVisible;
     m_trajectory.setVisible(m_trajectoryVisible);
     FileLogger::get().debug(std::string("[Trajectory] visible=") + (m_trajectoryVisible ? "true" : "false"));
+}
+
+void BotController::setSpeedhackEnabled(bool enabled) {
+    m_speedhack.setEnabled(enabled);
+    m_accumulator = 0.0;
+    FileLogger::get().debug(std::string("[Speedhack] enabled=") + (enabled ? "true" : "false"));
+}
+
+void BotController::setSpeedhackSpeed(float speed) {
+    m_speedhack.setSpeed(speed);
+    std::ostringstream out;
+    out << "[Speedhack] speed=" << m_speedhack.speed();
+    FileLogger::get().debug(out.str());
+}
+
+void BotController::setSpeedhackAudio(bool enabled) {
+    m_speedhack.setAudioFollow(enabled);
+    FileLogger::get().debug(std::string("[Speedhack] audioFollow=") + (enabled ? "true" : "false"));
 }
 
 void BotController::recordInput(bool pressed, int button, bool player1) {
@@ -194,8 +248,9 @@ void BotController::beforePhysicsStep(PlayLayer* layer) {
 void BotController::afterPhysicsStep(PlayLayer* layer) {
     if (!layer) return;
     if (m_mode == BotMode::Analyzing && m_branchResolved && m_pendingReset) return;
-    m_trajectory.sample(layer);
+
     ++m_currentFrame;
+    m_trajectory.update(layer, fixedDt(), m_currentFrame);
 
     if (m_mode == BotMode::Playback) {
         auto endFrame = m_lastMacro.lastFrame() + static_cast<std::uint32_t>(settingInt("post-macro-validation", 120));
@@ -208,7 +263,15 @@ void BotController::afterPhysicsStep(PlayLayer* layer) {
 
     if (m_mode == BotMode::Analyzing && !m_branchResolved && m_analysis.shouldPassAt(m_currentFrame)) {
         m_branchResolved = true;
-        advanceAnalysis("survived full macro + post validation", true);
+        advanceAnalysis("survived macro + validation horizon", true);
+    }
+}
+
+
+void BotController::beforeReset(PlayLayer* layer) {
+    if (!layer || !m_anchor.validFor(layer)) return;
+    if (m_mode == BotMode::Recording || m_mode == BotMode::Playback || m_mode == BotMode::Analyzing) {
+        m_forceAnchorLoad = true;
     }
 }
 
@@ -217,13 +280,33 @@ void BotController::onReset(PlayLayer* layer) {
     m_playbackCursor = 0;
     m_accumulator = 0.0;
     m_branchResolved = false;
+    if (layer) layer->m_extraDelta = 0.0f;
     m_trajectory.reset(layer);
 
     if (m_mode == BotMode::Recording) {
+        // A failed practice attempt starts a fresh recording from the same anchor.
         m_recordingMacro.inputs.clear();
         m_sequence = 0;
-        FileLogger::get().debug("[Record] reset -> discarded previous partial attempt");
+        FileLogger::get().debug("[Record] attempt reset -> partial inputs discarded; recording continues from anchor");
     }
+}
+
+CheckpointObject* BotController::forcedCheckpoint(PlayLayer* layer) const {
+    if (!m_forceAnchorLoad || !m_anchor.validFor(layer)) return nullptr;
+    return m_anchor.checkpoint();
+}
+
+
+void BotController::restartCurrentBranch(PlayLayer* layer) {
+    requestAnchorRestore(layer);
+}
+
+void BotController::onForcedCheckpointLoaded(PlayLayer* layer) {
+    if (!m_forceAnchorLoad) return;
+    m_forceAnchorLoad = false;
+    m_anchor.applySupplemental(layer);
+    if (layer) layer->m_extraDelta = 0.0f;
+    FileLogger::get().debug("[Practice] FWBot anchor loaded");
 }
 
 void BotController::onDeath(std::uint32_t frame, GameObject* cause) {
@@ -240,6 +323,16 @@ void BotController::onLevelComplete() {
         m_branchResolved = true;
         advanceAnalysis("level complete", true);
     }
+}
+
+void BotController::onPlayLayerExit(PlayLayer* layer) {
+    if (!layer) return;
+    cancelAutomation();
+    setFrameStepper(false);
+    m_speedhack.resetAudio();
+    m_anchor.clear();
+    m_trajectory.reset(nullptr);
+    FileLogger::get().debug("[FWBot] PlayLayer exit: runtime state cleared");
 }
 
 void BotController::advanceAnalysis(std::string const& reason, bool passed) {
@@ -281,27 +374,24 @@ void BotController::finishAnalysis() {
     m_pendingReset = false;
     m_branchResolved = false;
     m_accumulator = 0.0;
-
 }
 
-bool BotController::shouldUseFixedStep() const {
-    return m_mode != BotMode::Idle || m_framePaused;
+bool BotController::shouldInterceptUpdate() const {
+    return m_frameStepper || m_mode != BotMode::Idle || m_speedhack.enabled();
 }
 
-int BotController::stepsForUpdate(float realDt) {
-    if (!shouldUseFixedStep()) return 0;
+bool BotController::fixedDeltaActive() const {
+    return m_frameStepper || m_mode != BotMode::Idle;
+}
 
-    if (m_framePaused) {
-        if (m_stepRequests > 0) {
-            --m_stepRequests;
-            return 1;
-        }
-        return 0;
-    }
+int BotController::automatedStepsForUpdate(float realDt) {
+    if (m_frameStepper || m_mode == BotMode::Idle) return 0;
 
-    double speed = (m_mode == BotMode::Analyzing) ? static_cast<double>(settingInt("analysis-speed", 8)) : 1.0;
+    double speed = (m_mode == BotMode::Analyzing)
+        ? static_cast<double>(settingInt("analysis-speed", 8))
+        : static_cast<double>(m_speedhack.effectiveSpeed());
     auto dt = static_cast<double>(fixedDt());
-    m_accumulator += std::max(0.0f, std::min(realDt, 0.25f)) * speed;
+    m_accumulator += std::clamp(static_cast<double>(realDt), 0.0, 0.25) * speed;
     int steps = static_cast<int>(std::floor(m_accumulator / dt));
     steps = std::clamp(steps, 0, 256);
     m_accumulator -= static_cast<double>(steps) * dt;
@@ -324,12 +414,11 @@ std::string BotController::statusText() const {
         case BotMode::Idle: out << "Idle"; break;
         case BotMode::Recording: out << "Recording"; break;
         case BotMode::Playback: out << "Playback"; break;
-        case BotMode::Analyzing:
-            out << "Analyzing " << m_analysis.completedJobs() << '/' << m_analysis.totalJobs();
-            break;
+        case BotMode::Analyzing: out << "Analyzing " << m_analysis.completedJobs() << '/' << m_analysis.totalJobs(); break;
     }
-    out << " | frame " << m_currentFrame;
-    if (m_framePaused) out << " | PAUSED";
+    out << " | F " << m_currentFrame;
+    if (m_frameStepper) out << " | STEPPER";
+    if (m_speedhack.enabled()) out << " | " << m_speedhack.speed() << "x";
     return out.str();
 }
 

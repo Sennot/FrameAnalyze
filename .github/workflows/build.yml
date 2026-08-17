@@ -20,7 +20,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Configure portable core
-        run: cmake -S . -B build-core -DFWA_CORE_ONLY=ON -DFWA_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Release
+        run: cmake -S . -B build-core -DFWBOT_CORE_ONLY=ON -DFWBOT_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Release
       - name: Build portable core
         run: cmake --build build-core --config Release --parallel
       - name: Run tests
@@ -125,6 +125,23 @@ jobs:
           geode sdk update "$GEODE_VERSION"
           geode sdk install-binaries --platform win --version "$GEODE_VERSION"
 
+      - name: Fetch Dear ImGui v1.92.4 with retry
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p vendor
+          for attempt in 1 2 3 4; do
+            rm -rf vendor/imgui
+            if git clone --depth 1 --branch v1.92.4 https://github.com/ocornut/imgui.git vendor/imgui; then
+              break
+            fi
+            if [ "$attempt" = 4 ]; then
+              echo "Dear ImGui clone failed after retries" >&2
+              exit 1
+            fi
+            sleep $((attempt * 8))
+          done
+
       - name: Configure Geode Win64
         shell: bash
         run: |
@@ -137,7 +154,8 @@ jobs:
             -DCMAKE_CXX_COMPILER=clang++ \
             '-DGEODE_CODEGEN_CMAKE_ARGS=-DCMAKE_C_COMPILER=clang;-DCMAKE_CXX_COMPILER=clang++;-G Ninja' \
             -DGEODE_DONT_INSTALL_MODS=ON \
-            -DGEODE_TARGET_PLATFORM=Win64
+            -DGEODE_TARGET_PLATFORM=Win64 \
+            -DFETCHCONTENT_SOURCE_DIR_IMGUI="$GITHUB_WORKSPACE/vendor/imgui"
 
       - name: Build Geode Win64
         shell: bash
@@ -165,6 +183,6 @@ jobs:
       - name: Upload build
         uses: actions/upload-artifact@v4
         with:
-          name: FrameWindowAnalyzer-Win64
+          name: FWBot-Win64
           path: output/
           if-no-files-found: error

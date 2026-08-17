@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <map>
 #include <string>
@@ -17,7 +18,18 @@ struct MacroInput {
     bool player2 = false;
     int button = 1;
     InputAction action = InputAction::Hold;
-    std::size_t sequence = 0; // preserves deterministic order if two inputs share a frame
+    std::size_t sequence = 0;
+};
+
+struct AnchorInputState {
+    // Geometry Dash buttons are 1..3 in the bindings used by the bot.
+    std::array<bool, 4> p1{};
+    std::array<bool, 4> p2{};
+
+    [[nodiscard]] bool held(bool player2, int button) const {
+        if (button < 0 || button >= static_cast<int>(p1.size())) return false;
+        return player2 ? p2[static_cast<std::size_t>(button)] : p1[static_cast<std::size_t>(button)];
+    }
 };
 
 struct Macro {
@@ -25,6 +37,8 @@ struct Macro {
     int windowFps = 240;
     std::string levelName;
     int levelId = 0;
+    bool practiceAnchored = false;
+    AnchorInputState anchorInputs;
     std::vector<MacroInput> inputs;
 
     [[nodiscard]] std::uint32_t lastFrame() const {
@@ -51,11 +65,11 @@ struct FrameWindowResult {
     int scanRadius = 0;
     int early = 0;
     int late = 0;
-    int frameWindow = 0; // NaNDL N_i: contiguous passing segment that contains offset 0
+    int frameWindow = 0;
     bool baselinePassed = false;
     bool clippedByScanRadius = false;
     std::vector<WindowSegment> segments;
-    std::map<int, bool> verdicts; // offset -> survived
+    std::map<int, bool> verdicts;
 };
 
 inline char const* actionName(InputAction action) {
