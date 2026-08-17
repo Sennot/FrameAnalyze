@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.1.3
+- Fix Geode 5.8.2 keybind listener callback return type (`bool`).
+- Fix `PlayLayer*` vs `GJBaseGameLayer` hook pointer comparison in fixed-step update.
+- Keep all v0.1.2 CI/CMake fixes.
+
 ## v0.1.2
 - Replaced `geode-sdk/build-geode-mod@main` with a self-contained Win64 workflow.
 - Geode CLI v3.8.0 is downloaded through authenticated `gh release` requests using `GITHUB_TOKEN`.

@@ -1,25 +1,23 @@
-Frame Window Analyzer v0.1.2 local QA
-======================================
+Frame Window Analyzer v0.1.3 test results
+========================================
 
-Portable core:
-- C++ standard: C++23
-- Configure: PASS
-- Build: PASS
-- Tests: PASS
+Portable analyzer core
+- Compiler: GCC 14.2.0
+- Standard: C++23
+- Flags: -Wall -Wextra -Wpedantic -Werror
+- Result: 100% tests passed, 0 failed
 
-Internal ctest changing into directory: /mnt/data/fwa_v012/frame-window-analyzer/build-core-local
-Test project /mnt/data/fwa_v012/frame-window-analyzer/build-core-local
-    Start 1: fwa_core_tests
-1/1 Test #1: fwa_core_tests ...................   Passed    0.00 sec
+Regression coverage includes:
+- frame-perfect window
+- multi-frame contiguous window
+- recorded click inside a larger window (early/late/N_i)
+- disjoint passing segments
+- scan-radius clipping
+- baseline failure
+- NaNDL export
 
-100% tests passed, 0 tests failed out of 1
+Geode Win64 fixes in v0.1.3
+- Keybind listener explicitly returns bool for KeybindSettingPressedEventV3
+- Fixed-step PlayLayer identity check compares common GJBaseGameLayer base pointers
 
-Total Test time (real) =   0.00 sec
-
-CI workflow QA:
-- mod.json JSON parse: PASS
-- build.yml YAML syntax parse: PASS (when PyYAML available)
-- Removed geode-sdk/build-geode-mod composite action: PASS
-- Win64 workflow now performs authenticated Geode CLI release download, direct SDK clone, install-binaries, CMake/Ninja build, and output collection.
-
-Note: the Win64 Geode target still requires GitHub Actions to execute against the real Windows Geode SDK/bindings environment.
+Full Geode Win64 compilation/linking must be confirmed by GitHub Actions because the sandbox does not contain the Windows GD/Geode runtime toolchain.

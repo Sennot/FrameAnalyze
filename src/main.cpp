@@ -14,8 +14,11 @@ namespace {
 template <class F>
 void bindPress(char const* setting, F&& callback) {
     listenForKeybindSettingPresses(setting,
-        [fn = std::forward<F>(callback)](Keybind const&, bool down, bool repeat, double) mutable {
+        [fn = std::forward<F>(callback)](Keybind const&, bool down, bool repeat, double) mutable -> bool {
             if (down && !repeat) fn();
+            // KeybindSettingPressedEventV3 listeners return bool. Returning false
+            // lets the event continue to other listeners instead of consuming it.
+            return false;
         }
     );
 }

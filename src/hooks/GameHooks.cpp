@@ -23,7 +23,9 @@ class $modify(FWAGameLayerHook, GJBaseGameLayer) {
     void update(float dt) override {
         auto& bot = BotController::get();
         auto* play = PlayLayer::get();
-        if (!play || play != this || !bot.shouldUseFixedStep()) {
+        if (!play ||
+            static_cast<GJBaseGameLayer*>(play) != static_cast<GJBaseGameLayer*>(this) ||
+            !bot.shouldUseFixedStep()) {
             GJBaseGameLayer::update(dt);
             return;
         }

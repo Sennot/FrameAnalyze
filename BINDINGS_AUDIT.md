@@ -1,36 +1,29 @@
-# Bindings audit — Geode 5.8.2 / GD 2.2081
+# Geode bindings audit
 
-The portable sandbox cannot download or launch the Windows Geode SDK/GD runtime, so the full DLL cannot be linked locally here. The GitHub Actions workflow performs the real Win64 Geode build.
+Target: Geode SDK v5.8.2, Geometry Dash 2.2081, Win64.
 
-Before packaging v0.1.1, runtime hook signatures were cross-checked against the current Silicate source that targets the same Geode/GD versions:
+## Confirmed by GitHub Actions compile logs
 
-| Hook/API used here | Cross-check |
-|---|---|
-| `GJBaseGameLayer::update(float)` | current Silicate hooks `void update(float dt) override` |
-| `GJBaseGameLayer::getModifiedDelta(float)` | current Silicate hooks it and returns `double` |
-| `GJBaseGameLayer::handleButton(bool,int,bool)` | current Silicate uses the exact signature |
-| `PlayLayer::resetLevel()` | current Silicate hooks exact signature |
-| `PlayLayer::destroyPlayer(PlayerObject*,GameObject*)` | current Silicate hooks exact signature |
-| `PlayLayer::levelComplete()` | current Silicate hooks exact signature |
-| `PlayLayer::get()` | current Silicate uses it throughout gameplay hooks |
-| Geode v5 keybind settings | official Geode settings docs use `type: keybind` and `listenForKeybindSettingPresses` |
-| CI builder | official `geode-sdk/build-geode-mod@main` action |
+### KeybindSettingPressedEventV3
+`listenForKeybindSettingPresses` invokes listeners with:
 
-Reference sources:
+```cpp
+(Keybind const&, bool down, bool repeat, double timestamp) -> bool
+```
 
-- https://git.silicate.dev/silicate/silicate/src/branch/main/src/hooks/GJBaseGameLayer.cpp
-- https://git.silicate.dev/silicate/silicate/src/branch/main/src/hooks/PlayLayer.cpp
-- https://docs.geode-sdk.org/mods/settings/
-- https://github.com/geode-sdk/build-geode-mod
+The v0.1.2 listener accepted the four parameters but returned `void`, which failed template substitution in `Event.hpp` / `SettingV3.hpp`. v0.1.3 explicitly returns `bool` and returns `false` after processing the press so the event is not consumed.
 
-## v0.1.1 CI configure fix
+### GJBaseGameLayer update hook
+The fixed-step hook modifies `GJBaseGameLayer::update(float)`. `PlayLayer::get()` returns `PlayLayer*`, while `this` inside the modify class is `FWAGameLayerHook*`. v0.1.2 compared those distinct pointer types directly. v0.1.3 converts both to their common `GJBaseGameLayer*` base before comparing.
 
-The first real Win64 GitHub Actions run reached Geode 5.8.2 configuration and exposed a CMake-only issue before C++ compilation: the mod target used `target_link_libraries(FrameWindowAnalyzer PRIVATE fwa_core)`, while `setup_geode_mod()` links the same target with CMake's plain signature. CMake forbids mixing those signatures on one target. v0.1.1 changes the mod-target call to the plain form `target_link_libraries(FrameWindowAnalyzer fwa_core)`.
+### Previously confirmed by compilation
+The Win64 build reached and compiled Geode generated bindings and began compiling all FWA translation units. Signatures for the following hooks were accepted before the build stopped on the two errors above:
 
-Geode v5 also requires C++23, so v0.1.1 sets both `CMAKE_CXX_STANDARD` and the portable core compile feature to C++23.
+- `GJBaseGameLayer::handleButton(bool, int, bool)`
+- `GJBaseGameLayer::update(float)`
+- `GJBaseGameLayer::getModifiedDelta(float)`
+- `PlayLayer::resetLevel()`
+- `PlayLayer::destroyPlayer(PlayerObject*, GameObject*)`
+- `PlayLayer::levelComplete()`
 
-## What is still only CI/runtime-verifiable
-
-UI/Cocos convenience calls (`ButtonSprite`, `CCScale9Sprite`, draw-node rendering), generated binding/link addresses, and actual Windows ABI linkage require the Geode SDK/toolchain. That is why the workflow has a dedicated Win64 build after portable tests.
-
-If GitHub Actions reports a compile error, send the build log. The runtime code is deliberately split into small files so binding/API fixes do not touch the tested analyzer core.
+The next GitHub Actions run is still the authoritative full Win64 binding/link test.
